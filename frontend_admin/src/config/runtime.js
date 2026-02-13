@@ -16,7 +16,27 @@ export const API_BASE = trimTrailingSlash(
   resolveValue(import.meta.env.VITE_API_BASE, getDefaultOrigin())
 );
 
+const getApiOrigin = () => {
+  try {
+    return new URL(API_BASE, getDefaultOrigin()).origin;
+  } catch {
+    return getDefaultOrigin();
+  }
+};
+
+export const API_ORIGIN = trimTrailingSlash(getApiOrigin());
+
 export const buildApiUrl = (path) => {
   const cleanPath = String(path || "").replace(/^\/+/, "");
   return `${API_BASE}/${cleanPath}`;
+};
+
+export const resolveAssetUrl = (rawUrl) => {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+  if (/^(?:https?:)?\/\//i.test(value) || value.startsWith("data:") || value.startsWith("blob:")) {
+    return value;
+  }
+  const normalized = value.startsWith("/") ? value : `/${value}`;
+  return `${API_ORIGIN}${normalized}`;
 };

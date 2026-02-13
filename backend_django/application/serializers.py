@@ -17,11 +17,15 @@ from .models import (
 def build_public_file_url(file_field, request=None):
     if not file_field:
         return ""
-    url = file_field.url
+    url = str(file_field.url or "")
+    if not url:
+        return ""
+    if not url.startswith("/"):
+        url = f"/{url}"
     media_base = getattr(settings, "MEDIA_BASE_URL", "")
     if media_base:
         return f"{media_base}{url}"
-    return request.build_absolute_uri(url) if request else url
+    return url
 
 
 class RegionFieldSerializer(serializers.ModelSerializer):

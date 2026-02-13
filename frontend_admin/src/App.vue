@@ -393,7 +393,7 @@
                         @keydown.space.prevent="toggleApplicationSelection(item.id)"
                       >
                         <div class="card-photo">
-                          <img v-if="item.photo_url" :src="item.photo_url" alt="个人照片" />
+                          <img v-if="item.photo_url" :src="resolveMediaUrl(item.photo_url)" alt="个人照片" />
                           <div v-else class="photo-fallback">{{ item.name ? item.name.slice(0, 1) : "?" }}</div>
                           <span class="card-select-indicator" :class="{ active: isApplicationSelected(item.id) }">
                             <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="3" fill="none">
@@ -558,7 +558,7 @@
         <div class="detail-header">
           <div class="detail-header-left">
             <div class="detail-photo">
-              <img v-if="activeApplication.photo_url" :src="activeApplication.photo_url" alt="个人照片" />
+              <img v-if="activeApplication.photo_url" :src="resolveMediaUrl(activeApplication.photo_url)" alt="个人照片" />
               <div v-else class="photo-fallback">{{ activeApplication.name ? activeApplication.name.slice(0, 1) : "?" }}</div>
             </div>
             <div>
@@ -676,7 +676,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import UISwitch from './components/UISwitch.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
-import { buildApiUrl } from "./config/runtime";
+import { buildApiUrl, resolveAssetUrl } from "./config/runtime";
 
 const toastRef = ref(null);
 const confirmRef = ref(null);
@@ -684,6 +684,7 @@ const confirmRef = ref(null);
 // === 环境变量与基础配置 ===
 const adminBase = buildApiUrl("api/admin");
 const authBase = buildApiUrl("api/auth");
+const resolveMediaUrl = (url) => resolveAssetUrl(url);
 
 // === 状态管理 ===
 const token = ref(localStorage.getItem("admin_token") || "");
