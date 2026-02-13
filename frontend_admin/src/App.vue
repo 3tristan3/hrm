@@ -854,15 +854,42 @@ const displayValue = (v) => {
   if (v === null || v === undefined || v === "") return "-";
   return v;
 };
+
+const isFilledValue = (value) => value !== null && value !== undefined && value !== "";
+
+const formatStructuredList = (list, fields) => {
+  if (!Array.isArray(list) || list.length === 0) return "暂无";
+  const fieldKeys = new Set(fields.map((field) => field.key));
+  return list
+    .map((item) => {
+      if (!item || typeof item !== "object") return `- ${item ?? "-"}`;
+      const orderedParts = fields
+        .map((field) => {
+          const value = item[field.key];
+          if (!isFilledValue(value)) return "";
+          return `${field.label}：${value}`;
+        })
+        .filter(Boolean);
+      const extraParts = Object.entries(item)
+        .filter(([key, value]) => isFilledValue(value) && !fieldKeys.has(key))
+        .map(([key, value]) => `${key}：${value}`);
+      const parts = orderedParts.concat(extraParts);
+      return `- ${parts.length ? parts.join("，") : "-"}`;
+    })
+    .join("\n");
+};
+
 const formatList = (list) => {
   if (!Array.isArray(list) || list.length === 0) return "暂无";
-  return list.map((item) => {
-    if (!item || typeof item !== "object") return `- ${item ?? "-"}`;
-    const parts = Object.entries(item)
-      .filter(([, value]) => value !== null && value !== undefined && value !== "")
-      .map(([key, value]) => `${key}：${value}`);
-    return `- ${parts.length ? parts.join("，") : "-"}`;
-  }).join("\n");
+  return list
+    .map((item) => {
+      if (!item || typeof item !== "object") return `- ${item ?? "-"}`;
+      const parts = Object.entries(item)
+        .filter(([, value]) => isFilledValue(value))
+        .map(([key, value]) => `${key}：${value}`);
+      return `- ${parts.length ? parts.join("，") : "-"}`;
+    })
+    .join("\n");
 };
 const formatObject = (obj) => {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) return "暂无";
@@ -1121,15 +1148,48 @@ const detailSections = computed(() => {
     },
     {
       title: "教育/培训经历",
-      blocks: [{ label: "记录", value: formatList(app.education_history) }],
+      blocks: [
+        {
+          label: "记录",
+          value: formatStructuredList(app.education_history, [
+            { key: "school", label: "院校" },
+            { key: "major", label: "专业" },
+            { key: "degree", label: "学历" },
+            { key: "start", label: "开始时间" },
+            { key: "end", label: "结束时间" },
+          ]),
+        },
+      ],
     },
     {
       title: "工作经历",
-      blocks: [{ label: "记录", value: formatList(app.work_history) }],
+      blocks: [
+        {
+          label: "记录",
+          value: formatStructuredList(app.work_history, [
+            { key: "company", label: "公司" },
+            { key: "position", label: "岗位" },
+            { key: "start", label: "开始时间" },
+            { key: "end", label: "结束时间" },
+          ]),
+        },
+      ],
     },
     {
       title: "家庭成员",
-      blocks: [{ label: "记录", value: formatList(app.family_members) }],
+      blocks: [
+        {
+          label: "记录",
+          value: formatStructuredList(app.family_members, [
+            { key: "name", label: "姓名" },
+            { key: "relation", label: "关系" },
+            { key: "age", label: "年龄" },
+            { key: "company", label: "单位" },
+            { key: "position", label: "岗位" },
+            { key: "phone", label: "手机号" },
+          ]),
+        },
+      ],
     },
   ];
 });

@@ -311,9 +311,6 @@ class ApplicationAdminPhotoMixin(serializers.ModelSerializer):
             attachment = obj.attachments.filter(category="photo").order_by("-created_at").first()
         if not attachment or not attachment.file:
             return ""
-        request = self.context.get("request")
-        if request:
-            return request.build_absolute_uri(attachment.file.url)
         return attachment.file.url
 
 
@@ -406,9 +403,6 @@ class ApplicationAttachmentSerializer(serializers.ModelSerializer):
     def get_file_url(self, obj):
         if not obj.file:
             return ""
-        request = self.context.get("request")
-        if request:
-            return request.build_absolute_uri(obj.file.url)
         return obj.file.url
 
 
