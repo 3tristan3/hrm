@@ -80,7 +80,7 @@ import HobbySection from "./components/HobbySection.vue";
 import RegionExtraSection from "./components/RegionExtraSection.vue";
 import AttachmentSection from "./components/AttachmentSection.vue";
 import SuccessModal from "./components/SuccessModal.vue";
-import { buildApiUrl } from "./config/runtime";
+import { PREWARM_JOBS, PREWARM_REGION_LIMIT, buildApiUrl } from "./config/runtime";
 
 const regions = ref([]);
 const jobs = ref([]);
@@ -161,6 +161,7 @@ const jobUrl = buildApiUrl("api/jobs/");
 const REGIONS_CACHE_KEY = "hrm_regions_cache";
 const JOBS_CACHE_PREFIX = "hrm_jobs_cache_";
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const jobsRequestMap = new Map();
 
 const selectedRegion = computed(() =>
   regions.value.find((item) => String(item.id) === String(selectedRegionId.value))
@@ -207,10 +208,53 @@ const writeCache = (key, data) => {
   }
 };
 
+const fetchJobsByRegion = async (regionId, { silent = false } = {}) => {
+  if (!regionId) return [];
+  if (jobsRequestMap.has(regionId)) {
+    return jobsRequestMap.get(regionId);
+  }
+
+  const request = (async () => {
+    try {
+      const response = await fetch(`${jobUrl}?region_id=${regionId}`);
+      if (!response.ok) return [];
+      const data = await response.json();
+      writeCache(`${JOBS_CACHE_PREFIX}${regionId}`, data);
+      return data;
+    } catch (err) {
+      if (!silent) throw err;
+      return [];
+    } finally {
+      jobsRequestMap.delete(regionId);
+    }
+  })();
+
+  jobsRequestMap.set(regionId, request);
+  return request;
+};
+
+const prewarmJobs = async () => {
+  if (!PREWARM_JOBS || !regions.value.length) return;
+  const regionIds = regions.value
+    .map((item) => Number(item.id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, PREWARM_REGION_LIMIT);
+  if (!regionIds.length) return;
+
+  await Promise.allSettled(
+    regionIds.map(async (regionId) => {
+      const cacheKey = `${JOBS_CACHE_PREFIX}${regionId}`;
+      if (Array.isArray(readCache(cacheKey))) return;
+      await fetchJobsByRegion(regionId, { silent: true });
+    })
+  );
+};
+
 const fetchRegions = async () => {
   const cachedRegions = readCache(REGIONS_CACHE_KEY);
   if (Array.isArray(cachedRegions)) {
     regions.value = cachedRegions;
+    void prewarmJobs();
     return;
   }
   try {
@@ -219,6 +263,7 @@ const fetchRegions = async () => {
     const data = await response.json();
     regions.value = data;
     writeCache(REGIONS_CACHE_KEY, data);
+    void prewarmJobs();
   } catch (err) {
     errorMessage.value = "无法加载地区配置，请检查后端接口";
   }
@@ -233,11 +278,7 @@ const fetchJobs = async (regionId) => {
     return;
   }
   try {
-    const response = await fetch(`${jobUrl}?region_id=${regionId}`);
-    if (!response.ok) return;
-    const data = await response.json();
-    jobs.value = data;
-    writeCache(cacheKey, data);
+    jobs.value = await fetchJobsByRegion(regionId);
   } catch (err) {
     errorMessage.value = "无法加载岗位列表，请检查后端接口";
   }

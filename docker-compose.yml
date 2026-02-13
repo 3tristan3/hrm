@@ -70,6 +70,8 @@ services:
       args:
         VITE_API_BASE: ${APPLY_VITE_API_BASE:-}
         VITE_FORM_URL: ${APPLY_VITE_FORM_URL:-}
+        VITE_PREWARM_JOBS: ${APPLY_VITE_PREWARM_JOBS:-true}
+        VITE_PREWARM_REGION_LIMIT: ${APPLY_VITE_PREWARM_REGION_LIMIT:-3}
     restart: unless-stopped
     depends_on:
       backend:
