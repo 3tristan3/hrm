@@ -158,6 +158,9 @@ const modal = reactive({
 const submitUrl = buildApiUrl("api/applications/");
 const regionUrl = buildApiUrl("api/regions/");
 const jobUrl = buildApiUrl("api/jobs/");
+const REGIONS_CACHE_KEY = "hrm_regions_cache";
+const JOBS_CACHE_PREFIX = "hrm_jobs_cache_";
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const selectedRegion = computed(() =>
   regions.value.find((item) => String(item.id) === String(selectedRegionId.value))
@@ -173,11 +176,49 @@ const clearErrors = () => {
   Object.keys(errors).forEach((key) => delete errors[key]);
 };
 
+const canUseSessionStorage = () => typeof window !== "undefined" && !!window.sessionStorage;
+
+const readCache = (key) => {
+  if (!canUseSessionStorage()) return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.timestamp || !("data" in parsed)) return null;
+    if (Date.now() - parsed.timestamp > CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+};
+
+const writeCache = (key, data) => {
+  if (!canUseSessionStorage()) return;
+  try {
+    window.sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        timestamp: Date.now(),
+        data,
+      })
+    );
+  } catch {
+    // Ignore cache write failures (e.g. private mode / quota)
+  }
+};
+
 const fetchRegions = async () => {
+  const cachedRegions = readCache(REGIONS_CACHE_KEY);
+  if (Array.isArray(cachedRegions)) {
+    regions.value = cachedRegions;
+    return;
+  }
   try {
     const response = await fetch(regionUrl);
     if (!response.ok) return;
-    regions.value = await response.json();
+    const data = await response.json();
+    regions.value = data;
+    writeCache(REGIONS_CACHE_KEY, data);
   } catch (err) {
     errorMessage.value = "无法加载地区配置，请检查后端接口";
   }
@@ -185,10 +226,18 @@ const fetchRegions = async () => {
 
 const fetchJobs = async (regionId) => {
   if (!regionId) return;
+  const cacheKey = `${JOBS_CACHE_PREFIX}${regionId}`;
+  const cachedJobs = readCache(cacheKey);
+  if (Array.isArray(cachedJobs)) {
+    jobs.value = cachedJobs;
+    return;
+  }
   try {
     const response = await fetch(`${jobUrl}?region_id=${regionId}`);
     if (!response.ok) return;
-    jobs.value = await response.json();
+    const data = await response.json();
+    jobs.value = data;
+    writeCache(cacheKey, data);
   } catch (err) {
     errorMessage.value = "无法加载岗位列表，请检查后端接口";
   }
