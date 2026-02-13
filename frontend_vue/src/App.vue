@@ -27,7 +27,7 @@
         <EducationHistorySection :rows="educationRows" :errors="errors" @add="addEducationRow" @remove="removeEducationRow" />
         <ContactSection :form="form" :errors="errors" />
         <EmergencySection :form="form" />
-        <WorkHistorySection :rows="workRows" @add="addWorkRow" @remove="removeWorkRow" />
+        <WorkHistorySection :rows="workRows" :errors="errors" @add="addWorkRow" @remove="removeWorkRow" />
         <FamilySection :rows="familyRows" :errors="errors" @add="addFamilyRow" @remove="removeFamilyRow" />
         <HobbySection :form="form" />
         <RegionExtraSection
@@ -321,6 +321,7 @@ const validate = () => {
   });
 
   const educationRequiredFields = ["school", "major", "degree", "start", "end"];
+  const workRequiredFields = ["company", "position", "start", "end"];
   const familyRequiredFields = ["name", "relation", "age", "company", "position", "phone"];
   const isRowComplete = (row, fields) =>
     fields.every((field) => {
@@ -347,6 +348,12 @@ const validate = () => {
     errors.family_members = "请至少填写两位家庭成员";
   } else if (familyRows.value.some((row) => !isRowComplete(row, familyRequiredFields))) {
     errors.family_members = "家庭成员信息每一条内容均为必填";
+  }
+
+  if (workRows.value.length < 1) {
+    errors.work_history = "请至少填写一条工作经历";
+  } else if (workRows.value.some((row) => !isRowComplete(row, workRequiredFields))) {
+    errors.work_history = "工作经历每一条内容均为必填";
   }
 
   if (form.phone && !/^\d{11}$/.test(form.phone)) errors.phone = "手机号格式不正确";

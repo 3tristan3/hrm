@@ -9,6 +9,7 @@
       <button class="btn btn-default" type="button" @click="$emit('add')">+ 新增一条</button>
     </div>
     <div class="section-body">
+      <p v-if="errors.work_history" class="field-error">{{ errors.work_history }}</p>
       <div v-if="!rows.length" class="empty-tip">暂无记录</div>
       <div class="repeat-list">
         <div v-for="(row, index) in rows" :key="`work-${index}`" class="repeat-row">
@@ -42,6 +43,7 @@
 <script setup>
 defineProps({
   rows: { type: Array, default: () => [] },
+  errors: { type: Object, default: () => ({}) },
 });
 defineEmits(["add", "remove"]);
 </script>

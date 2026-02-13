@@ -201,6 +201,15 @@ class ApplicationCreateSerializer(serializers.Serializer):
         ):
             raise serializers.ValidationError({"family_members": "家庭成员信息每一条内容均为必填"})
 
+        work_history = attrs.get("work_history") or []
+        if len(work_history) < 1:
+            raise serializers.ValidationError({"work_history": "请至少填写一条工作经历"})
+        if not all(
+            is_row_complete(row, ["company", "position", "start", "end"])
+            for row in work_history
+        ):
+            raise serializers.ValidationError({"work_history": "工作经历每一条内容均为必填"})
+
         attrs["region"] = region
         attrs["job"] = job
         return attrs
