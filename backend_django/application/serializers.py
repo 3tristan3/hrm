@@ -1,15 +1,27 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 
 from .models import (
     Application,
     ApplicationAttachment,
+    InterviewCandidate,
     Job,
     Region,
     RegionField,
     UserProfile,
 )
+
+
+def build_public_file_url(file_field, request=None):
+    if not file_field:
+        return ""
+    url = file_field.url
+    media_base = getattr(settings, "MEDIA_BASE_URL", "")
+    if media_base:
+        return f"{media_base}{url}"
+    return request.build_absolute_uri(url) if request else url
 
 
 class RegionFieldSerializer(serializers.ModelSerializer):
@@ -308,8 +320,26 @@ class JobAdminSerializer(serializers.ModelSerializer):
         ]
 
 
+class JobBatchStatusSerializer(serializers.Serializer):
+    job_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+    is_active = serializers.BooleanField()
+
+    def validate_job_ids(self, value):
+        unique_ids = list(dict.fromkeys(value))
+        if len(unique_ids) > 200:
+            raise serializers.ValidationError("单次最多选择 200 个岗位")
+        return unique_ids
+
+
 class ApplicationAdminPhotoMixin(serializers.ModelSerializer):
     photo_url = serializers.SerializerMethodField()
+
+    def _file_url(self, file_field):
+        request = self.context.get("request")
+        return build_public_file_url(file_field, request=request)
 
     def get_photo_url(self, obj):
         attachments = getattr(obj, "photo_attachments", None)
@@ -320,7 +350,7 @@ class ApplicationAdminPhotoMixin(serializers.ModelSerializer):
             attachment = obj.attachments.filter(category="photo").order_by("-created_at").first()
         if not attachment or not attachment.file:
             return ""
-        return attachment.file.url
+        return self._file_url(attachment.file)
 
 
 class ApplicationAdminListSerializer(ApplicationAdminPhotoMixin):
@@ -402,6 +432,78 @@ class ApplicationAdminSerializer(ApplicationAdminPhotoMixin):
         ]
 
 
+class InterviewCandidateBatchAddSerializer(serializers.Serializer):
+    application_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+
+    def validate_application_ids(self, value):
+        unique_ids = list(dict.fromkeys(value))
+        if len(unique_ids) > 200:
+            raise serializers.ValidationError("单次最多选择 200 条应聘记录")
+        return unique_ids
+
+
+class InterviewCandidateBatchRemoveSerializer(serializers.Serializer):
+    interview_candidate_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+
+    def validate_interview_candidate_ids(self, value):
+        unique_ids = list(dict.fromkeys(value))
+        if len(unique_ids) > 200:
+            raise serializers.ValidationError("单次最多选择 200 条拟面试人员")
+        return unique_ids
+
+
+class InterviewCandidateListSerializer(serializers.ModelSerializer):
+    application_id = serializers.IntegerField(source="application.id", read_only=True)
+    name = serializers.CharField(source="application.name", read_only=True)
+    phone = serializers.CharField(source="application.phone", read_only=True)
+    recruit_type = serializers.CharField(source="application.recruit_type", read_only=True)
+    education_level = serializers.CharField(source="application.education_level", read_only=True)
+    region_name = serializers.CharField(source="application.region.name", read_only=True)
+    job_title = serializers.CharField(source="application.job.title", read_only=True)
+    photo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InterviewCandidate
+        fields = [
+            "id",
+            "application_id",
+            "name",
+            "phone",
+            "recruit_type",
+            "education_level",
+            "region_name",
+            "job_title",
+            "status",
+            "note",
+            "photo_url",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_photo_url(self, obj):
+        application = obj.application
+        attachments = getattr(application, "photo_attachments", None)
+        attachment = None
+        if isinstance(attachments, list):
+            attachment = attachments[0] if attachments else None
+        else:
+            attachment = (
+                application.attachments.filter(category="photo")
+                .order_by("-created_at")
+                .first()
+            )
+        if not attachment or not attachment.file:
+            return ""
+        request = self.context.get("request")
+        return build_public_file_url(attachment.file, request=request)
+
+
 class ApplicationAttachmentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
 
@@ -410,9 +512,8 @@ class ApplicationAttachmentSerializer(serializers.ModelSerializer):
         fields = ["id", "category", "file", "file_url", "created_at"]
 
     def get_file_url(self, obj):
-        if not obj.file:
-            return ""
-        return obj.file.url
+        request = self.context.get("request")
+        return build_public_file_url(obj.file, request=request)
 
 
 class ApplicationAttachmentUploadSerializer(serializers.Serializer):

@@ -11,7 +11,14 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Application, ApplicationAttachment, Job, Region, RegionField
+from .models import (
+    Application,
+    ApplicationAttachment,
+    InterviewCandidate,
+    Job,
+    Region,
+    RegionField,
+)
 from .serializers import (
     ApplicationAdminListSerializer,
     ApplicationAdminSerializer,
@@ -21,7 +28,11 @@ from .serializers import (
     AdminPasswordResetSerializer,
     AdminUserSerializer,
     ChangePasswordSerializer,
+    InterviewCandidateBatchAddSerializer,
+    InterviewCandidateBatchRemoveSerializer,
+    InterviewCandidateListSerializer,
     JobAdminSerializer,
+    JobBatchStatusSerializer,
     JobSerializer,
     LoginSerializer,
     MeSerializer,
@@ -419,6 +430,40 @@ class AdminJobDetailView(AdminScopedMixin, generics.RetrieveUpdateDestroyAPIView
             )
 
 
+class AdminJobBatchStatusView(AdminScopedMixin, APIView):
+    def post(self, request: Request):
+        serializer = JobBatchStatusSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        job_ids = serializer.validated_data["job_ids"]
+        is_active = serializer.validated_data["is_active"]
+
+        queryset = self._scope_queryset(Job.objects.filter(id__in=job_ids))
+        allowed_ids = set(queryset.values_list("id", flat=True))
+        missing_ids = sorted(set(job_ids) - allowed_ids)
+        if missing_ids:
+            return Response(
+                {
+                    "error": "包含无权限或不存在的岗位",
+                    "details": {"job_ids": missing_ids},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated = queryset.update(is_active=is_active)
+        return Response(
+            {
+                "updated": updated,
+                "total": len(job_ids),
+                "is_active": is_active,
+            }
+        )
+
+
 class _ApplicationAdminQuerysetMixin(AdminScopedMixin):
     """共享 Application 查询集逻辑。"""
 
@@ -437,7 +482,7 @@ class AdminApplicationListView(_ApplicationAdminQuerysetMixin, generics.ListAPIV
     serializer_class = ApplicationAdminListSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().filter(job__is_active=True)
         job_id = self.request.query_params.get("job_id")
         region_id = self.request.query_params.get("region_id")
         job = self.request.query_params.get("job")
@@ -455,3 +500,126 @@ class AdminApplicationListView(_ApplicationAdminQuerysetMixin, generics.ListAPIV
 
 class AdminApplicationDetailView(_ApplicationAdminQuerysetMixin, generics.RetrieveAPIView):
     serializer_class = ApplicationAdminSerializer
+
+
+class _InterviewCandidateAdminQuerysetMixin(AdminScopedMixin):
+    def get_queryset(self):
+        queryset = InterviewCandidate.objects.select_related(
+            "application",
+            "application__region",
+            "application__job",
+        ).prefetch_related(
+            Prefetch(
+                "application__attachments",
+                queryset=ApplicationAttachment.objects.filter(category="photo").order_by(
+                    "-created_at"
+                ),
+                to_attr="photo_attachments",
+            )
+        )
+        region_id = self._user_region_scope()
+        if region_id:
+            queryset = queryset.filter(application__region_id=region_id)
+        return queryset
+
+
+class AdminInterviewCandidateListView(_InterviewCandidateAdminQuerysetMixin, generics.ListAPIView):
+    serializer_class = InterviewCandidateListSerializer
+
+
+class AdminInterviewCandidateDetailView(
+    _InterviewCandidateAdminQuerysetMixin, generics.DestroyAPIView
+):
+    serializer_class = InterviewCandidateListSerializer
+
+
+class AdminInterviewCandidateBatchAddView(AdminScopedMixin, APIView):
+    def post(self, request: Request):
+        serializer = InterviewCandidateBatchAddSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        application_ids = serializer.validated_data["application_ids"]
+        region_id = self._user_region_scope()
+        app_queryset = Application.objects.filter(id__in=application_ids)
+        if region_id:
+            app_queryset = app_queryset.filter(region_id=region_id)
+
+        allowed_ids = set(app_queryset.values_list("id", flat=True))
+        missing_ids = sorted(set(application_ids) - allowed_ids)
+        if missing_ids:
+            return Response(
+                {
+                    "error": "包含无权限或不存在的应聘记录",
+                    "details": {"application_ids": missing_ids},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_before = set(
+            InterviewCandidate.objects.filter(application_id__in=application_ids).values_list(
+                "application_id", flat=True
+            )
+        )
+
+        to_create = [
+            InterviewCandidate(application_id=application_id)
+            for application_id in application_ids
+            if application_id not in existing_before
+        ]
+        if to_create:
+            InterviewCandidate.objects.bulk_create(to_create, ignore_conflicts=True)
+
+        existing_after = set(
+            InterviewCandidate.objects.filter(application_id__in=application_ids).values_list(
+                "application_id", flat=True
+            )
+        )
+        added_count = len(existing_after - existing_before)
+
+        return Response(
+            {
+                "added": added_count,
+                "existing": len(existing_before),
+                "total": len(application_ids),
+            }
+        )
+
+
+class AdminInterviewCandidateBatchRemoveView(AdminScopedMixin, APIView):
+    def post(self, request: Request):
+        serializer = InterviewCandidateBatchRemoveSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        interview_candidate_ids = serializer.validated_data["interview_candidate_ids"]
+        queryset = InterviewCandidate.objects.filter(id__in=interview_candidate_ids)
+        region_id = self._user_region_scope()
+        if region_id:
+            queryset = queryset.filter(application__region_id=region_id)
+
+        allowed_ids = set(queryset.values_list("id", flat=True))
+        missing_ids = sorted(set(interview_candidate_ids) - allowed_ids)
+        if missing_ids:
+            return Response(
+                {
+                    "error": "包含无权限或不存在的拟面试人员记录",
+                    "details": {"interview_candidate_ids": missing_ids},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        removed_count = queryset.count()
+        queryset.delete()
+        return Response(
+            {
+                "removed": removed_count,
+                "total": len(interview_candidate_ids),
+            }
+        )

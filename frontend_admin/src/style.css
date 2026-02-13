@@ -249,6 +249,8 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   display: flex;
   flex-direction: column;
   background: var(--bg-body);
+  height: 100vh;
+  min-height: 100vh;
 }
 .top-bar {
   height: var(--header-height);
@@ -265,6 +267,8 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 }
 .content-body {
   padding: 24px 28px 32px;
+  min-height: 0;
+  overflow: auto;
 }
 .card {
   background: var(--bg-card);
@@ -455,6 +459,13 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   align-items: flex-start;
   gap: 12px;
 }
+.applications-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .header-sub {
   margin: 6px 0 0;
   font-size: 13px;
@@ -466,8 +477,9 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 .job-tabs {
   display: flex;
@@ -533,6 +545,11 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+.group-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .group-header h4 {
   margin: 0;
@@ -656,6 +673,10 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 /* Job Management */
 .job-body {
   padding: 22px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 .job-toolbar {
   display: flex;
@@ -668,12 +689,20 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   background: #ffffff;
   box-shadow: 0 10px 22px rgba(12,74,110,0.05);
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 .job-toolbar-left,
 .job-toolbar-right {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.job-table-wrap {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: auto;
 }
 .job-modal-overlay {
   position: fixed;
@@ -828,13 +857,27 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  cursor: pointer;
+  min-height: 366px;
   transition: 0.2s ease;
 }
 .application-card:hover {
   border-color: #cdd7e3;
   box-shadow: 0 16px 30px rgba(15,23,42,0.12);
   transform: translateY(-2px);
+}
+.application-card.selected {
+  border-color: #2563EB;
+  box-shadow: 0 14px 30px rgba(37,99,235,0.22);
+}
+.application-card-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  cursor: pointer;
+  outline: none;
+}
+.application-card-main:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(37,99,235,0.3);
 }
 .card-photo {
   position: relative;
@@ -873,10 +916,31 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   color: #fff;
   font-size: 13px;
 }
+.card-select-indicator {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(148,163,184,0.85);
+  background: rgba(255,255,255,0.92);
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+}
+.card-select-indicator.active {
+  background: #2563EB;
+  border-color: #2563EB;
+  color: #fff;
+}
 .app-card-body {
   padding: 14px 16px 12px;
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 10px;
 }
 .card-title-row {
@@ -884,11 +948,17 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
 }
 .card-name {
   font-size: 17px;
   font-weight: 600;
   color: var(--text-main);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .card-badge {
   display: inline-flex;
@@ -899,6 +969,8 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   color: #fff;
   background: var(--primary);
   box-shadow: 0 6px 14px rgba(29,78,216,0.18);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .card-info-grid {
   display: grid;
@@ -929,10 +1001,65 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px 14px;
+  width: 100%;
+  border: none;
+  background: #F8FAFC;
+  padding: 10px 16px;
+  min-height: 46px;
+  flex-shrink: 0;
   border-top: 1px solid #E2E8F0;
   font-size: 13px;
   color: var(--primary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.card-cta:hover {
+  background: #EEF2FF;
+  color: var(--primary-dark);
+}
+.card-cta svg {
+  flex-shrink: 0;
+}
+.interview-header {
+  align-items: flex-start;
+  gap: 12px;
+}
+.interview-table-wrap {
+  min-height: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: auto;
+}
+.interview-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+.interview-table th:first-child,
+.interview-table td:first-child {
+  text-align: center;
+}
+.job-card,
+.applications-card,
+.interview-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100vh - var(--header-height) - 58px);
+}
+.job-card .card-body,
+.applications-card .card-body,
+.interview-card .card-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.applications-scroll,
+.interviews-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 .empty-state {
   padding: 32px;
@@ -1095,6 +1222,11 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 @media (max-width: 900px) {
   .sidebar { display: none; }
   .content-body { padding: 16px; }
+  .job-card,
+  .applications-card,
+  .interview-card {
+    height: calc(100vh - var(--header-height) - 36px);
+  }
   .auth-box { width: 100%; max-width: 420px; }
   .form-row, .form-grid-3, .form-grid-2 { grid-template-columns: 1fr; }
   .filter-bar { grid-template-columns: 1fr; }
@@ -1104,6 +1236,10 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   .job-modal { width: 100%; }
   .application-toolbar { flex-direction: column; align-items: stretch; }
   .filter-actions { flex-direction: column; align-items: stretch; }
+  .applications-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
   .account-panels { grid-template-columns: 1fr; }
   .detail-header { flex-direction: column; align-items: flex-start; }
   .detail-modal { max-height: 92vh; }

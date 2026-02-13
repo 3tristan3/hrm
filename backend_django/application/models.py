@@ -157,6 +157,39 @@ class ApplicationAttachment(models.Model):
         return f"{self.application.pk}-{self.category}"
 
 
+class InterviewCandidate(models.Model):
+    STATUS_PENDING = "待安排"
+    STATUS_SCHEDULED = "已安排"
+    STATUS_COMPLETED = "已完成"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "待安排"),
+        (STATUS_SCHEDULED, "已安排"),
+        (STATUS_COMPLETED, "已完成"),
+    ]
+
+    application = models.OneToOneField(
+        Application,
+        related_name="interview_candidate",
+        on_delete=models.CASCADE,
+        verbose_name="应聘记录",
+    )
+    status = models.CharField(
+        "面试状态", max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
+    note = models.TextField("备注", blank=True, default="")
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "id"]
+        verbose_name = "拟面试人员"
+        verbose_name_plural = "拟面试人员"
+
+    def __str__(self):
+        return f"{self.application.name}-{self.application.job.title}"
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField("auth.User", on_delete=models.CASCADE, related_name="profile")
     region = models.ForeignKey(Region, on_delete=models.PROTECT, verbose_name="地区")

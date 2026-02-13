@@ -130,6 +130,13 @@
               <div class="job-toolbar-right">
                 <span class="chip subtle">已选 {{ selectedJobsCount }} 个</span>
                 <button
+                  class="btn btn-sm btn-default"
+                  :disabled="selectedJobIds.length === 0"
+                  @click="batchDeactivateJobs"
+                >
+                  批量下架
+                </button>
+                <button
                   class="btn btn-sm btn-danger"
                   :disabled="selectedJobIds.length === 0"
                   @click="batchDeleteJobs"
@@ -139,44 +146,46 @@
               </div>
             </div>
 
-            <table class="data-table job-table">
-              <thead>
-                <tr>
-                  <th width="6%">
-                    <input type="checkbox" v-model="isAllJobsSelected" />
-                  </th>
-                  <th width="16%">岗位名称</th>
-                  <th width="12%">地区</th>
-                  <th width="26%">岗位职责</th>
-                  <th width="10%">薪资</th>
-                  <th width="10%">学历</th>
-                  <th width="10%">状态</th>
-                  <th width="10%">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in jobs" :key="item.id">
-                  <td>
-                    <input type="checkbox" :value="item.id" v-model="selectedJobIds" />
-                  </td>
-                  <td class="font-medium">{{ item.title }}</td>
-                  <td><span class="tag">{{ item.region_name || regionName(item.region) }}</span></td>
-                  <td>
-                    <div class="text-truncate" :title="item.description">{{ item.description || '-' }}</div>
-                  </td>
-                  <td>{{ item.salary || "-" }}</td>
-                  <td>{{ item.education || "-" }}</td>
-                  <td>
-                    <span class="status-dot" :class="{ active: item.is_active }"></span>
-                    {{ item.is_active ? "上架" : "下架" }}
-                  </td>
-                  <td>
-                    <a class="action-link" @click="editJob(item)">编辑</a>
-                    <a class="action-link danger" @click="deleteJob(item.id)">删除</a>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="job-table-wrap">
+              <table class="data-table job-table">
+                <thead>
+                  <tr>
+                    <th width="6%">
+                      <input type="checkbox" v-model="isAllJobsSelected" />
+                    </th>
+                    <th width="16%">岗位名称</th>
+                    <th width="12%">地区</th>
+                    <th width="26%">岗位职责</th>
+                    <th width="10%">薪资</th>
+                    <th width="10%">学历</th>
+                    <th width="10%">状态</th>
+                    <th width="10%">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in jobs" :key="item.id">
+                    <td>
+                      <input type="checkbox" :value="item.id" v-model="selectedJobIds" />
+                    </td>
+                    <td class="font-medium">{{ item.title }}</td>
+                    <td><span class="tag">{{ item.region_name || regionName(item.region) }}</span></td>
+                    <td>
+                      <div class="text-truncate" :title="item.description">{{ item.description || '-' }}</div>
+                    </td>
+                    <td>{{ item.salary || "-" }}</td>
+                    <td>{{ item.education || "-" }}</td>
+                    <td>
+                      <span class="status-dot" :class="{ active: item.is_active }"></span>
+                      {{ item.is_active ? "上架" : "下架" }}
+                    </td>
+                    <td>
+                      <a class="action-link" @click="editJob(item)">编辑</a>
+                      <a class="action-link danger" @click="deleteJob(item.id)">删除</a>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -299,13 +308,24 @@
         </div>
 
         <!-- 应聘记录 -->
-        <div v-else-if="activeTab === 'applications'" class="card">
+        <div v-else-if="activeTab === 'applications'" class="card applications-card">
           <div class="card-header applications-header">
             <div>
               <h3>应聘记录明细</h3>
               <p class="header-sub">显示 {{ filteredApplications.length }} / {{ applications.length }} 条</p>
             </div>
-            <button class="btn btn-sm btn-primary" type="button" @click="refreshApplications">刷新数据</button>
+            <div class="applications-header-actions">
+              <span class="chip subtle">已选 {{ selectedApplicationsCount }} 人</span>
+              <button
+                class="btn btn-sm btn-primary"
+                type="button"
+                :disabled="selectedApplicationsCount === 0"
+                @click="addSelectedToInterviewPool"
+              >
+                加入拟面试人员<span v-if="selectedApplicationsCount">（{{ selectedApplicationsCount }}）</span>
+              </button>
+              <button class="btn btn-sm btn-default" type="button" @click="refreshApplications">刷新数据</button>
+            </div>
           </div>
           <div class="card-body">
             <div class="application-toolbar">
@@ -338,57 +358,191 @@
                 <button class="btn btn-sm btn-default" @click="resetApplicationFilters">重置筛选</button>
               </div>
             </div>
-            <div v-if="groupedApplications.length" class="application-groups">
-              <section v-for="group in groupedApplications" :key="group.title" class="application-group">
-                <div class="group-header">
-                  <div>
-                    <h4>{{ group.title }}</h4>
-                    <p class="text-muted">共 {{ group.items.length }} 条应聘记录</p>
-                  </div>
-                  <span class="chip subtle">{{ group.items.length }} 条</span>
-                </div>
-                <div class="application-grid">
-                  <div v-for="item in group.items" :key="item.id" class="application-card" @click="openApplication(item)">
-                    <div class="card-photo">
-                      <img v-if="item.photo_url" :src="item.photo_url" alt="个人照片" />
-                      <div v-else class="photo-fallback">{{ item.name ? item.name.slice(0, 1) : "?" }}</div>
-                      <span class="card-pill">{{ item.job_title }}</span>
+            <div class="applications-scroll">
+              <div v-if="groupedApplications.length" class="application-groups">
+                <section v-for="group in groupedApplications" :key="group.title" class="application-group">
+                  <div class="group-header">
+                    <div>
+                      <h4>{{ group.title }}</h4>
+                      <p class="text-muted">共 {{ group.items.length }} 条应聘记录</p>
                     </div>
-                    <div class="app-card-body">
-                      <div class="card-title-row">
-                        <div class="card-name">{{ item.name }}</div>
-                        <span class="card-badge">{{ item.recruit_type || "类型未填写" }}</span>
-                      </div>
-                      <div class="card-info-grid">
-                        <div class="info-item">
-                          <span class="info-label">性别</span>
-                          <span class="info-value">{{ item.gender || "-" }}</span>
-                        </div>
-                        <div class="info-item">
-                          <span class="info-label">年龄</span>
-                          <span class="info-value">{{ item.age ? `${item.age}岁` : "-" }}</span>
-                        </div>
-                        <div class="info-item">
-                          <span class="info-label">手机号</span>
-                          <span class="info-value">{{ item.phone || "-" }}</span>
-                        </div>
-                        <div class="info-item">
-                          <span class="info-label">学历</span>
-                          <span class="info-value">{{ item.education_level || "-" }}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="card-cta">
-                      <span>查看详情</span>
-                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                      </svg>
+                    <div class="group-header-actions">
+                      <button
+                        class="btn btn-xs btn-default"
+                        type="button"
+                        @click="toggleApplicationGroupSelection(group.items)"
+                      >
+                        {{ isApplicationGroupFullySelected(group.items) ? "取消全选" : "全选" }}
+                      </button>
+                      <span class="chip subtle">{{ group.items.length }} 条</span>
                     </div>
                   </div>
-                </div>
-              </section>
+                  <div class="application-grid">
+                    <div
+                      v-for="item in group.items"
+                      :key="item.id"
+                      class="application-card"
+                      :class="{ selected: isApplicationSelected(item.id) }"
+                    >
+                      <div
+                        class="application-card-main"
+                        role="button"
+                        tabindex="0"
+                        @click="toggleApplicationSelection(item.id)"
+                        @keydown.enter.prevent="toggleApplicationSelection(item.id)"
+                        @keydown.space.prevent="toggleApplicationSelection(item.id)"
+                      >
+                        <div class="card-photo">
+                          <img v-if="item.photo_url" :src="item.photo_url" alt="个人照片" />
+                          <div v-else class="photo-fallback">{{ item.name ? item.name.slice(0, 1) : "?" }}</div>
+                          <span class="card-select-indicator" :class="{ active: isApplicationSelected(item.id) }">
+                            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="3" fill="none">
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                          </span>
+                          <span class="card-pill">{{ item.job_title }}</span>
+                        </div>
+                        <div class="app-card-body">
+                          <div class="card-title-row">
+                            <div class="card-name" :title="item.name">{{ item.name }}</div>
+                            <span class="card-badge">{{ item.recruit_type || "类型未填写" }}</span>
+                          </div>
+                          <div class="card-info-grid">
+                            <div class="info-item">
+                              <span class="info-label">性别</span>
+                              <span class="info-value">{{ item.gender || "-" }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">年龄</span>
+                              <span class="info-value">{{ item.age ? `${item.age}岁` : "-" }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">手机号</span>
+                              <span class="info-value">{{ item.phone || "-" }}</span>
+                            </div>
+                            <div class="info-item">
+                              <span class="info-label">学历</span>
+                              <span class="info-value">{{ item.education_level || "-" }}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <button class="card-cta" type="button" @click="openApplication(item)">
+                        <span>查看详情</span>
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+                          <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <div v-else class="empty-state">暂无匹配的应聘记录</div>
             </div>
-            <div v-else class="empty-state">暂无匹配的应聘记录</div>
+          </div>
+        </div>
+
+        <div v-else-if="activeTab === 'interviews'" class="card interview-card">
+          <div class="card-header interview-header">
+            <div>
+              <h3>拟面试人员</h3>
+              <p class="header-sub">显示 {{ filteredInterviewCandidates.length }} / {{ interviewCandidates.length }} 人</p>
+            </div>
+            <div class="applications-header-actions">
+              <span class="chip subtle">已选 {{ selectedInterviewCount }} 人</span>
+              <button
+                class="btn btn-sm btn-danger"
+                type="button"
+                :disabled="selectedInterviewCount === 0"
+                @click="batchRemoveInterviewCandidates"
+              >
+                批量移出<span v-if="selectedInterviewCount">（{{ selectedInterviewCount }}）</span>
+              </button>
+              <button class="btn btn-sm btn-default" type="button" @click="refreshInterviewCandidates">刷新列表</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="application-toolbar">
+              <div class="job-tabs">
+                <button
+                  v-for="job in interviewJobCategories"
+                  :key="job.value"
+                  class="tab-pill"
+                  :class="{ active: interviewFilters.job === job.value }"
+                  @click="interviewFilters.job = job.value"
+                >
+                  {{ job.label }}
+                  <span class="tab-count">{{ job.count }}</span>
+                </button>
+              </div>
+              <div class="filter-actions">
+                <div v-if="showRegionFilter" class="filter-field">
+                  <label>地区筛选</label>
+                  <div class="input-with-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                      <circle cx="11" cy="11" r="7"></circle>
+                      <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+                    </svg>
+                    <select v-model="interviewFilters.region">
+                      <option value="">全部地区</option>
+                      <option v-for="item in regions" :key="item.id" :value="item.name">{{ item.name }}</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="filter-field">
+                  <div class="input-with-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                      <circle cx="11" cy="11" r="7"></circle>
+                      <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+                    </svg>
+                    <input v-model.trim="interviewFilters.keyword" placeholder="姓名/手机号" />
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-default" @click="resetInterviewFilters">重置筛选</button>
+              </div>
+            </div>
+            <div class="interviews-scroll">
+              <div v-if="filteredInterviewCandidates.length" class="interview-table-wrap">
+                <table class="data-table interview-table">
+                  <thead>
+                    <tr>
+                      <th width="6%">
+                        <input type="checkbox" v-model="isAllVisibleInterviewsSelected" />
+                      </th>
+                      <th>姓名</th>
+                      <th>岗位</th>
+                      <th>地区</th>
+                      <th>手机号</th>
+                      <th>招聘类型</th>
+                      <th>学历</th>
+                      <th>加入时间</th>
+                      <th>状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in filteredInterviewCandidates" :key="item.id">
+                      <td>
+                        <input type="checkbox" :value="item.id" v-model="selectedInterviewIds" />
+                      </td>
+                      <td class="font-medium">{{ item.name || "-" }}</td>
+                      <td>{{ item.job_title || "-" }}</td>
+                      <td>{{ item.region_name || "-" }}</td>
+                      <td>{{ item.phone || "-" }}</td>
+                      <td>{{ item.recruit_type || "-" }}</td>
+                      <td>{{ item.education_level || "-" }}</td>
+                      <td>{{ formatTime(item.created_at) }}</td>
+                      <td><span class="chip subtle">{{ item.status || "待安排" }}</span></td>
+                      <td class="action-cell">
+                        <button class="btn btn-xs btn-default" type="button" @click="openApplicationFromInterview(item)">查看详情</button>
+                        <button class="btn btn-xs btn-danger" type="button" @click="removeInterviewCandidate(item)">移出</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-else class="empty-state">暂无拟面试人员</div>
+            </div>
           </div>
         </div>
 
@@ -541,6 +695,7 @@ const tabs = [
   { key: "regions", label: "地区管理", adminOnly: true },
   { key: "jobs", label: "岗位管理", adminOnly: false },
   { key: "applications", label: "应聘记录", adminOnly: false },
+  { key: "interviews", label: "拟面试人员", adminOnly: false },
   { key: "accounts", label: "账号管理", adminOnly: true },
 ];
 
@@ -549,19 +704,23 @@ const jobForm = reactive({ id: null, region: "", title: "", description: "", sal
 const passwordForm = reactive({ user_id: "", password: "" });
 const selfPasswordForm = reactive({ old_password: "", new_password: "", confirm_password: "" });
 const selectedJobIds = ref([]);
+const selectedApplicationIds = ref([]);
+const selectedInterviewIds = ref([]);
 const showJobForm = ref(false);
 const applicationFilters = reactive({ job: "all", region: "" });
+const interviewFilters = reactive({ job: "all", region: "", keyword: "" });
 
 const publicRegions = ref([]);
 const regions = ref([]);
 const jobs = ref([]);
 const applications = ref([]);
+const interviewCandidates = ref([]);
 const users = ref([]);
 const userProfile = reactive({ can_view_all: false, region_name: "", region_id: null, is_superuser: false });
 const activeApplication = ref(null);
 const applicationDetailLoading = ref(false);
-const dataLoaded = reactive({ regions: false, jobs: false, applications: false, users: false });
-const dataLoading = reactive({ regions: false, jobs: false, applications: false, users: false });
+const dataLoaded = reactive({ regions: false, jobs: false, applications: false, interviews: false, users: false });
+const dataLoading = reactive({ regions: false, jobs: false, applications: false, interviews: false, users: false });
 
 // === 计算属性 ===
 const visibleTabs = computed(() =>
@@ -607,7 +766,43 @@ const groupedApplications = computed(() => {
     .sort((a, b) => a.title.localeCompare(b.title, "zh-Hans-CN"));
 });
 
+const regionFilteredInterviewCandidates = computed(() => {
+  const regionKeyword = interviewFilters.region.trim().toLowerCase();
+  return interviewCandidates.value.filter((item) => {
+    const regionValue = (item.region_name || "").toLowerCase();
+    return !regionKeyword || regionValue === regionKeyword;
+  });
+});
+
+const interviewJobCategories = computed(() => {
+  const counts = new Map();
+  regionFilteredInterviewCandidates.value.forEach((item) => {
+    const title = item.job_title || "未填写岗位";
+    counts.set(title, (counts.get(title) || 0) + 1);
+  });
+  const categories = Array.from(counts.entries())
+    .map(([title, count]) => ({ label: title, value: title, count }))
+    .sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN"));
+  return [{ label: "全部岗位", value: "all", count: regionFilteredInterviewCandidates.value.length }, ...categories];
+});
+
+const filteredInterviewCandidates = computed(() => {
+  const keyword = interviewFilters.keyword.trim().toLowerCase();
+  let result = regionFilteredInterviewCandidates.value;
+  if (interviewFilters.job !== "all") {
+    result = result.filter((item) => (item.job_title || "未填写岗位") === interviewFilters.job);
+  }
+  if (!keyword) return result;
+  return result.filter((item) => {
+    const name = (item.name || "").toLowerCase();
+    const phone = String(item.phone || "").toLowerCase();
+    return name.includes(keyword) || phone.includes(keyword);
+  });
+});
+
 const selectedJobsCount = computed(() => selectedJobIds.value.length);
+const selectedApplicationsCount = computed(() => selectedApplicationIds.value.length);
+const selectedInterviewCount = computed(() => selectedInterviewIds.value.length);
 const isAllJobsSelected = computed({
   get() {
     return jobs.value.length > 0 && jobs.value.every((job) => selectedJobIds.value.includes(job.id));
@@ -615,6 +810,22 @@ const isAllJobsSelected = computed({
   set(value) {
     selectedJobIds.value = value ? jobs.value.map((job) => job.id) : [];
   }
+});
+const isAllVisibleInterviewsSelected = computed({
+  get() {
+    const visibleIds = filteredInterviewCandidates.value.map((item) => item.id);
+    if (!visibleIds.length) return false;
+    return visibleIds.every((id) => selectedInterviewIds.value.includes(id));
+  },
+  set(value) {
+    const visibleIds = filteredInterviewCandidates.value.map((item) => item.id);
+    if (value) {
+      selectedInterviewIds.value = Array.from(new Set([...selectedInterviewIds.value, ...visibleIds]));
+      return;
+    }
+    const visibleSet = new Set(visibleIds);
+    selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => !visibleSet.has(id));
+  },
 });
 
 // === API 请求封装 ===
@@ -707,6 +918,8 @@ const loadApplications = async (force = false) => {
   dataLoading.applications = true;
   try {
     applications.value = await request(`${adminBase}/applications/`);
+    const availableIds = new Set(applications.value.map((item) => item.id));
+    selectedApplicationIds.value = selectedApplicationIds.value.filter((id) => availableIds.has(id));
     dataLoaded.applications = true;
     const availableJobs = jobCategories.value.map((item) => item.value);
     if (!availableJobs.includes(applicationFilters.job)) {
@@ -718,6 +931,26 @@ const loadApplications = async (force = false) => {
     return false;
   } finally {
     dataLoading.applications = false;
+  }
+};
+
+const loadInterviewCandidates = async (force = false) => {
+  if (dataLoading.interviews) return;
+  if (!force && dataLoaded.interviews) return;
+  dataLoading.interviews = true;
+  try {
+    interviewCandidates.value = await request(`${adminBase}/interview-candidates/`);
+    const availableIds = new Set(interviewCandidates.value.map((item) => item.id));
+    selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => availableIds.has(id));
+    const availableJobs = interviewJobCategories.value.map((item) => item.value);
+    if (!availableJobs.includes(interviewFilters.job)) {
+      interviewFilters.job = "all";
+    }
+    dataLoaded.interviews = true;
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    dataLoading.interviews = false;
   }
 };
 
@@ -748,6 +981,10 @@ const ensureTabData = async (tabKey, force = false) => {
   }
   if (tabKey === "applications") {
     await Promise.all([loadRegions(force), loadApplications(force)]);
+    return;
+  }
+  if (tabKey === "interviews") {
+    await loadInterviewCandidates(force);
     return;
   }
   if (tabKey === "accounts") {
@@ -791,6 +1028,7 @@ const submitAuth = async () => {
     dataLoaded.regions = false;
     dataLoaded.jobs = false;
     dataLoaded.applications = false;
+    dataLoaded.interviews = false;
     dataLoaded.users = false;
 
     notifySuccess("登录成功");
@@ -819,17 +1057,24 @@ const logout = async (silent = false) => {
     regions.value = [];
     jobs.value = [];
     applications.value = [];
+    interviewCandidates.value = [];
     users.value = [];
+    selectedApplicationIds.value = [];
+    selectedInterviewIds.value = [];
     dataLoaded.regions = false;
     dataLoaded.jobs = false;
     dataLoaded.applications = false;
+    dataLoaded.interviews = false;
     dataLoaded.users = false;
     dataLoading.regions = false;
     dataLoading.jobs = false;
     dataLoading.applications = false;
+    dataLoading.interviews = false;
     dataLoading.users = false;
     activeApplication.value = null;
     applicationDetailLoading.value = false;
+    resetApplicationFilters();
+    resetInterviewFilters();
     userProfile.can_view_all = false;
     userProfile.region_name = "";
     userProfile.region_id = null;
@@ -928,6 +1173,29 @@ const deleteJob = async (id) => {
     await request(`${adminBase}/jobs/${id}/`, { method: "DELETE" });
     notifySuccess("删除成功");
     await loadJobs(true);
+  } catch (err) {
+    notifyError(err);
+  }
+};
+const batchDeactivateJobs = async () => {
+  if (!selectedJobIds.value.length) return;
+  const ok = await confirmRef.value.open({
+    title: "批量下架岗位",
+    content: `将下架已选中的 ${selectedJobIds.value.length} 个岗位，下架后对应应聘记录将不再展示，是否继续？`,
+    type: "danger",
+    confirmText: "下架",
+  });
+  if (!ok) return;
+  try {
+    const result = await request(`${adminBase}/jobs/batch-status/`, {
+      method: "POST",
+      body: JSON.stringify({ job_ids: selectedJobIds.value, is_active: false }),
+    });
+    notifySuccess(`已下架 ${result.updated || 0} 个岗位`);
+    await loadJobs(true);
+    if (dataLoaded.applications) {
+      await loadApplications(true);
+    }
   } catch (err) {
     notifyError(err);
   }
@@ -1045,6 +1313,138 @@ const fetchJobs = async () => {
 const resetApplicationFilters = () => {
   applicationFilters.job = "all";
   applicationFilters.region = "";
+};
+
+const resetInterviewFilters = () => {
+  interviewFilters.job = "all";
+  interviewFilters.region = "";
+  interviewFilters.keyword = "";
+};
+
+const isApplicationSelected = (applicationId) =>
+  selectedApplicationIds.value.includes(applicationId);
+
+const getApplicationGroupIds = (items) =>
+  (Array.isArray(items) ? items : [])
+    .map((item) => item?.id)
+    .filter((id) => typeof id === "number");
+
+const isApplicationGroupFullySelected = (items) => {
+  const groupIds = getApplicationGroupIds(items);
+  return (
+    groupIds.length > 0 &&
+    groupIds.every((id) => selectedApplicationIds.value.includes(id))
+  );
+};
+
+const toggleApplicationGroupSelection = (items) => {
+  const groupIds = getApplicationGroupIds(items);
+  if (!groupIds.length) return;
+
+  if (isApplicationGroupFullySelected(items)) {
+    const groupSet = new Set(groupIds);
+    selectedApplicationIds.value = selectedApplicationIds.value.filter(
+      (id) => !groupSet.has(id)
+    );
+    return;
+  }
+
+  const merged = new Set([...selectedApplicationIds.value, ...groupIds]);
+  selectedApplicationIds.value = Array.from(merged);
+};
+
+const toggleApplicationSelection = (applicationId) => {
+  if (isApplicationSelected(applicationId)) {
+    selectedApplicationIds.value = selectedApplicationIds.value.filter(
+      (id) => id !== applicationId
+    );
+    return;
+  }
+  selectedApplicationIds.value = [...selectedApplicationIds.value, applicationId];
+};
+
+const addSelectedToInterviewPool = async () => {
+  if (!selectedApplicationIds.value.length) return;
+  const ok = await confirmRef.value.open({
+    title: "加入拟面试人员",
+    content: `确认将已选 ${selectedApplicationIds.value.length} 人加入拟面试人员吗？`,
+    confirmText: "加入",
+    type: "default",
+  });
+  if (!ok) return;
+  try {
+    const result = await request(`${adminBase}/interview-candidates/batch-add/`, {
+      method: "POST",
+      body: JSON.stringify({ application_ids: selectedApplicationIds.value }),
+    });
+    const parts = [];
+    if (result.added) parts.push(`新增 ${result.added} 人`);
+    if (result.existing) parts.push(`已存在 ${result.existing} 人`);
+    notifySuccess(parts.length ? `操作完成：${parts.join("，")}` : "操作完成");
+    selectedApplicationIds.value = [];
+    await Promise.all([loadApplications(true), loadInterviewCandidates(true)]);
+    activeTab.value = "interviews";
+  } catch (err) {
+    notifyError(err);
+  }
+};
+
+const refreshInterviewCandidates = async () => {
+  await loadInterviewCandidates(true);
+  resetInterviewFilters();
+  notifySuccess("拟面试人员列表已刷新");
+};
+
+const batchRemoveInterviewCandidates = async () => {
+  if (!selectedInterviewIds.value.length) return;
+  const ok = await confirmRef.value.open({
+    title: "批量移出拟面试人员",
+    content: `确认移出已选 ${selectedInterviewIds.value.length} 人吗？`,
+    confirmText: "移出",
+    type: "danger",
+  });
+  if (!ok) return;
+  try {
+    const result = await request(`${adminBase}/interview-candidates/batch-remove/`, {
+      method: "POST",
+      body: JSON.stringify({ interview_candidate_ids: selectedInterviewIds.value }),
+    });
+    selectedInterviewIds.value = [];
+    await loadInterviewCandidates(true);
+    notifySuccess(`已移出 ${result.removed || 0} 人`);
+  } catch (err) {
+    notifyError(err);
+  }
+};
+
+const removeInterviewCandidate = async (item) => {
+  const ok = await confirmRef.value.open({
+    title: "移出拟面试人员",
+    content: `确认将「${item.name || "该应聘者"}」移出拟面试人员吗？`,
+    confirmText: "移出",
+    type: "danger",
+  });
+  if (!ok) return;
+  try {
+    await request(`${adminBase}/interview-candidates/${item.id}/`, {
+      method: "DELETE",
+    });
+    selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => id !== item.id);
+    notifySuccess("已移出拟面试人员");
+    await loadInterviewCandidates(true);
+  } catch (err) {
+    notifyError(err);
+  }
+};
+
+const openApplicationFromInterview = async (item) => {
+  await openApplication({
+    id: item.application_id,
+    name: item.name,
+    job_title: item.job_title,
+    region_name: item.region_name,
+    photo_url: item.photo_url,
+  });
 };
 
 const openApplication = async (item) => {
