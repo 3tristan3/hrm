@@ -1,6 +1,8 @@
+"""后端 API 视图实现，承载后台管理与应聘流程业务接口。"""
 import json
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Prefetch, ProtectedError
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
@@ -11,10 +13,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .interview_flow import (
+    FINAL_RESULTS,
+    InterviewFlowError,
+    MAX_INTERVIEW_ROUND,
+    cancel_schedule,
+    record_result,
+    schedule_interview,
+)
 from .models import (
     Application,
     ApplicationAttachment,
     InterviewCandidate,
+    InterviewRoundRecord,
     Job,
     Region,
     RegionField,
@@ -30,7 +41,11 @@ from .serializers import (
     ChangePasswordSerializer,
     InterviewCandidateBatchAddSerializer,
     InterviewCandidateBatchRemoveSerializer,
+    InterviewCandidateCancelScheduleSerializer,
     InterviewCandidateListSerializer,
+    InterviewPassedCandidateListSerializer,
+    InterviewCandidateResultSerializer,
+    InterviewCandidateScheduleSerializer,
     JobAdminSerializer,
     JobBatchStatusSerializer,
     JobSerializer,
@@ -503,7 +518,10 @@ class AdminApplicationDetailView(_ApplicationAdminQuerysetMixin, generics.Retrie
 
 
 class _InterviewCandidateAdminQuerysetMixin(AdminScopedMixin):
+    """拟面试人员模块共用能力：查询范围、行锁读取、流程错误输出。"""
+
     def get_queryset(self):
+        """返回带应聘信息的候选人列表，并按账号地区做数据隔离。"""
         queryset = InterviewCandidate.objects.select_related(
             "application",
             "application__region",
@@ -522,9 +540,88 @@ class _InterviewCandidateAdminQuerysetMixin(AdminScopedMixin):
             queryset = queryset.filter(application__region_id=region_id)
         return queryset
 
+    def get_locked_candidate(self, pk: int) -> InterviewCandidate:
+        """在事务中读取并锁定候选人，避免并发写导致状态错乱。"""
+        queryset = InterviewCandidate.objects.select_for_update().select_related(
+            "application",
+            "application__region",
+            "application__job",
+        )
+        region_id = self._user_region_scope()
+        if region_id:
+            queryset = queryset.filter(application__region_id=region_id)
+        return get_object_or_404(queryset, pk=pk)
+
+    @staticmethod
+    def flow_error_response(error: InterviewFlowError) -> Response:
+        """统一输出流程层业务错误。"""
+        return Response(error.to_payload(), status=error.status_code)
+
 
 class AdminInterviewCandidateListView(_InterviewCandidateAdminQuerysetMixin, generics.ListAPIView):
     serializer_class = InterviewCandidateListSerializer
+
+    def get_queryset(self):
+        # 拟面试池仅展示流程中的候选人，已出结果（已完成）移出该列表。
+        return super().get_queryset().exclude(status=InterviewCandidate.STATUS_COMPLETED)
+
+
+class AdminInterviewMetaView(AdminScopedMixin, APIView):
+    """输出面试模块元数据，供前端统一常量和选项。"""
+
+    def get(self, request: Request):
+        return Response(
+            {
+                "status_pending": InterviewCandidate.STATUS_PENDING,
+                "status_scheduled": InterviewCandidate.STATUS_SCHEDULED,
+                "status_completed": InterviewCandidate.STATUS_COMPLETED,
+                "result_pending": InterviewCandidate.RESULT_PENDING,
+                "result_next_round": InterviewCandidate.RESULT_NEXT_ROUND,
+                "result_pass": InterviewCandidate.RESULT_PASS,
+                "result_reject": InterviewCandidate.RESULT_REJECT,
+                "status_choices": [
+                    {"value": value, "label": label}
+                    for value, label in InterviewCandidate.STATUS_CHOICES
+                ],
+                "result_choices": [
+                    {"value": value, "label": label}
+                    for value, label in InterviewCandidate.RESULT_CHOICES
+                ],
+                "final_results": list(FINAL_RESULTS),
+                "max_round": MAX_INTERVIEW_ROUND,
+            }
+        )
+
+
+class _InterviewOutcomeCandidateListView(_InterviewCandidateAdminQuerysetMixin, generics.ListAPIView):
+    """面试结果池列表基类：按最终结果筛选并输出轮次快照。"""
+
+    serializer_class = InterviewPassedCandidateListSerializer
+    outcome_result: str = ""
+
+    def get_queryset(self):
+        queryset = super().get_queryset().filter(
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=self.outcome_result,
+        )
+        return queryset.prefetch_related(
+            Prefetch(
+                "round_records",
+                queryset=InterviewRoundRecord.objects.order_by("round_no", "id"),
+            )
+        ).order_by("-result_at", "-updated_at", "-id")
+
+
+class AdminPassedCandidateListView(_InterviewOutcomeCandidateListView):
+    """面试通过人员列表，含各轮次快照信息。"""
+
+    outcome_result = InterviewCandidate.RESULT_PASS
+
+
+class AdminTalentPoolCandidateListView(_InterviewOutcomeCandidateListView):
+    """人才库列表（面试淘汰人员），含各轮次快照信息。"""
+
+    outcome_result = InterviewCandidate.RESULT_REJECT
 
 
 class AdminInterviewCandidateDetailView(
@@ -533,7 +630,95 @@ class AdminInterviewCandidateDetailView(
     serializer_class = InterviewCandidateListSerializer
 
 
+class AdminInterviewCandidateScheduleView(_InterviewCandidateAdminQuerysetMixin, APIView):
+    """安排/改期面试接口。"""
+
+    def post(self, request: Request, pk: int):
+        serializer = InterviewCandidateScheduleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = serializer.validated_data
+        try:
+            with transaction.atomic():
+                candidate = self.get_locked_candidate(pk)
+                schedule_interview(
+                    candidate,
+                    interview_at=data["interview_at"],
+                    interviewer=data.get("interviewer", ""),
+                    interview_location=data.get("interview_location", ""),
+                    note=data.get("note", None),
+                )
+        except InterviewFlowError as err:
+            return self.flow_error_response(err)
+
+        output = InterviewCandidateListSerializer(candidate, context={"request": request})
+        return Response({"message": "面试安排已保存", "candidate": output.data})
+
+
+class AdminInterviewCandidateCancelScheduleView(_InterviewCandidateAdminQuerysetMixin, APIView):
+    """取消已安排面试接口。"""
+
+    def post(self, request: Request, pk: int):
+        serializer = InterviewCandidateCancelScheduleSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            with transaction.atomic():
+                candidate = self.get_locked_candidate(pk)
+                cancel_schedule(
+                    candidate,
+                    note=serializer.validated_data.get("note", "").strip(),
+                )
+        except InterviewFlowError as err:
+            return self.flow_error_response(err)
+
+        output = InterviewCandidateListSerializer(candidate, context={"request": request})
+        return Response({"message": "已取消面试安排", "candidate": output.data})
+
+
+class AdminInterviewCandidateResultView(_InterviewCandidateAdminQuerysetMixin, APIView):
+    """记录面试结果并推进到下一状态。"""
+
+    def post(self, request: Request, pk: int):
+        serializer = InterviewCandidateResultSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = serializer.validated_data
+        result = data["result"]
+        score = data.get("score", None)
+        result_note = data.get("result_note", "")
+
+        try:
+            with transaction.atomic():
+                candidate = self.get_locked_candidate(pk)
+                record_result(
+                    candidate,
+                    result=result,
+                    score=score,
+                    result_note=result_note,
+                )
+        except InterviewFlowError as err:
+            return self.flow_error_response(err)
+
+        output = InterviewCandidateListSerializer(candidate, context={"request": request})
+        return Response({"message": "面试结果已保存", "candidate": output.data})
+
+
 class AdminInterviewCandidateBatchAddView(AdminScopedMixin, APIView):
+    """批量把应聘记录加入拟面试池。"""
+
     def post(self, request: Request):
         serializer = InterviewCandidateBatchAddSerializer(data=request.data)
         if not serializer.is_valid():
@@ -590,6 +775,8 @@ class AdminInterviewCandidateBatchAddView(AdminScopedMixin, APIView):
 
 
 class AdminInterviewCandidateBatchRemoveView(AdminScopedMixin, APIView):
+    """批量从拟面试池移除候选人。"""
+
     def post(self, request: Request):
         serializer = InterviewCandidateBatchRemoveSerializer(data=request.data)
         if not serializer.is_valid():

@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：Toast 文件，实现对应模块能力。 -->
   <transition name="toast-fade">
     <div v-if="visible" class="toast-wrapper" :class="type">
       <div class="toast-icon">

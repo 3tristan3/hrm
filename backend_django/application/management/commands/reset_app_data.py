@@ -1,3 +1,4 @@
+"""reset_app_data 文件，实现对应模块能力。"""
 from django.core.management.base import BaseCommand
 from django.db import transaction
 

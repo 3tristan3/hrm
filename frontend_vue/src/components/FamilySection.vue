@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：FamilySection 文件，实现对应模块能力。 -->
   <section class="section-card">
     <div class="section-header">
       <div>

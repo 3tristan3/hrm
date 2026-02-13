@@ -1,3 +1,4 @@
+"""seed_operator_applications 文件，实现对应模块能力。"""
 import random
 import string
 from datetime import date, timedelta

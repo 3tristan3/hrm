@@ -1,6 +1,16 @@
+"""admin 文件，实现对应模块能力。"""
 from django.contrib import admin
 
-from .models import Application, ApplicationAttachment, Job, Region, RegionField, UserProfile
+from .models import (
+    Application,
+    ApplicationAttachment,
+    InterviewCandidate,
+    InterviewRoundRecord,
+    Job,
+    Region,
+    RegionField,
+    UserProfile,
+)
 
 admin.site.site_header = "应聘信息管理后台"
 admin.site.site_title = "应聘填报后台"
@@ -58,3 +68,35 @@ class ApplicationAttachmentAdmin(admin.ModelAdmin):
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "region", "can_view_all", "created_at")
     list_filter = ("region", "can_view_all")
+
+
+@admin.register(InterviewCandidate)
+class InterviewCandidateAdmin(admin.ModelAdmin):
+    list_display = (
+        "application",
+        "interview_round",
+        "interview_at",
+        "interviewer",
+        "interview_location",
+        "result",
+        "score",
+        "status",
+        "updated_at",
+    )
+    list_filter = ("status", "interview_round")
+    search_fields = ("application__name", "application__phone", "interviewer")
+
+
+@admin.register(InterviewRoundRecord)
+class InterviewRoundRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "candidate",
+        "round_no",
+        "interview_at",
+        "interviewer",
+        "score",
+        "result",
+        "created_at",
+    )
+    list_filter = ("round_no", "result")
+    search_fields = ("candidate__application__name", "candidate__application__phone", "interviewer")

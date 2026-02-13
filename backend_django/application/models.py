@@ -1,3 +1,4 @@
+"""业务数据模型定义，包含应聘记录、拟面试人员与轮次快照等核心实体。"""
 from django.db import models
 
 
@@ -158,6 +159,8 @@ class ApplicationAttachment(models.Model):
 
 
 class InterviewCandidate(models.Model):
+    """拟面试池记录：保存当前轮次、当前安排和当前结果。"""
+
     STATUS_PENDING = "待安排"
     STATUS_SCHEDULED = "已安排"
     STATUS_COMPLETED = "已完成"
@@ -166,6 +169,17 @@ class InterviewCandidate(models.Model):
         (STATUS_PENDING, "待安排"),
         (STATUS_SCHEDULED, "已安排"),
         (STATUS_COMPLETED, "已完成"),
+    ]
+
+    RESULT_PENDING = "待定"
+    RESULT_NEXT_ROUND = "进入下一轮"
+    RESULT_PASS = "通过"
+    RESULT_REJECT = "淘汰"
+    RESULT_CHOICES = [
+        (RESULT_PENDING, "待定"),
+        (RESULT_NEXT_ROUND, "进入下一轮"),
+        (RESULT_PASS, "通过"),
+        (RESULT_REJECT, "淘汰"),
     ]
 
     application = models.OneToOneField(
@@ -177,6 +191,14 @@ class InterviewCandidate(models.Model):
     status = models.CharField(
         "面试状态", max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING
     )
+    interview_round = models.PositiveSmallIntegerField("面试轮次", default=1)
+    interview_at = models.DateTimeField("面试时间", null=True, blank=True)
+    interviewer = models.CharField("面试官", max_length=100, blank=True, default="")
+    interview_location = models.CharField("面试地点", max_length=200, blank=True, default="")
+    result = models.CharField("面试结果", max_length=20, choices=RESULT_CHOICES, blank=True, default="")
+    score = models.PositiveSmallIntegerField("面试评分", null=True, blank=True)
+    result_note = models.TextField("结果评语", blank=True, default="")
+    result_at = models.DateTimeField("结果记录时间", null=True, blank=True)
     note = models.TextField("备注", blank=True, default="")
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
@@ -188,6 +210,43 @@ class InterviewCandidate(models.Model):
 
     def __str__(self):
         return f"{self.application.name}-{self.application.job.title}"
+
+
+class InterviewRoundRecord(models.Model):
+    """轮次快照：每轮结果落盘，支持通过人员多轮信息展示。"""
+
+    candidate = models.ForeignKey(
+        InterviewCandidate,
+        related_name="round_records",
+        on_delete=models.CASCADE,
+        verbose_name="拟面试人员",
+    )
+    round_no = models.PositiveSmallIntegerField("面试轮次")
+    interview_at = models.DateTimeField("面试时间", null=True, blank=True)
+    interviewer = models.CharField("面试官", max_length=100, blank=True, default="")
+    score = models.PositiveSmallIntegerField("面试评分", null=True, blank=True)
+    result = models.CharField(
+        "面试结果",
+        max_length=20,
+        choices=InterviewCandidate.RESULT_CHOICES,
+        blank=True,
+        default="",
+    )
+    result_note = models.TextField("结果评语", blank=True, default="")
+    created_at = models.DateTimeField("记录时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["round_no", "id"]
+        verbose_name = "面试轮次记录"
+        verbose_name_plural = "面试轮次记录"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["candidate", "round_no"], name="uniq_interview_candidate_round_no"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.candidate.application.name}-第{self.round_no}轮"
 
 
 class UserProfile(models.Model):

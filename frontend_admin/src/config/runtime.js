@@ -1,3 +1,4 @@
+// runtime 文件，实现对应模块能力。
 const trimTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
 const getDefaultOrigin = () => {
@@ -40,3 +41,4 @@ export const resolveAssetUrl = (rawUrl) => {
   const normalized = value.startsWith("/") ? value : `/${value}`;
   return `${API_ORIGIN}${normalized}`;
 };
+

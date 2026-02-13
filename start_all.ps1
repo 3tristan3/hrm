@@ -1,9 +1,17 @@
+# 本地一键启动脚本，用于同时拉起前后端开发服务。
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $root "backend_django"
 $applyDir = Join-Path $root "frontend_vue"
 $adminDir = Join-Path $root "frontend_admin"
+$backendEnv = Join-Path $backendDir ".env"
+$backendEnvExample = Join-Path $backendDir ".env.example"
+
+if (!(Test-Path $backendEnv) -and (Test-Path $backendEnvExample)) {
+  Copy-Item $backendEnvExample $backendEnv
+  Write-Host "已自动创建 backend_django/.env（来自 .env.example）" -ForegroundColor Yellow
+}
 
 function New-RunnerCommand {
   param(
@@ -25,7 +33,8 @@ $backendSteps = @(
   "if (!(Test-Path '.venv\Scripts\Activate.ps1')) { python -m venv .venv }",
   ". .\.venv\Scripts\Activate.ps1",
   "python -m pip install -r requirements.txt",
-  "python manage.py migrate",
+  "python manage.py check",
+  "python manage.py migrate --noinput",
   "python manage.py runserver 0.0.0.0:8000"
 )
 
@@ -51,6 +60,8 @@ Write-Host ""
 Write-Host "HRM 启动脚本已执行，已打开 3 个窗口：" -ForegroundColor Green
 Write-Host "- Backend:   http://127.0.0.1:8000" -ForegroundColor Cyan
 Write-Host "- Apply UI:  http://127.0.0.1:8080" -ForegroundColor Cyan
+Write-Host "- Apply QR:  http://127.0.0.1:8080/qr.html" -ForegroundColor Cyan
 Write-Host "- Admin UI:  http://127.0.0.1:8090" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "如果 8080/8090 被占用，Vite 会直接报错（不会自动跳到 5173/5174）。" -ForegroundColor Yellow
+

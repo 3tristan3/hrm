@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：UISwitch 文件，实现对应模块能力。 -->
   <label class="ui-switch">
     <input 
       type="checkbox" 

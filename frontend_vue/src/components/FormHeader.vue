@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：FormHeader 文件，实现对应模块能力。 -->
   <header class="page-header">
     <div class="brand">
       <div class="brand-mark">WIN</div>

@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：应聘端主页面，承载报名流程入口与表单容器。 -->
   <div class="page">
     <FormHeader :submitting="submitting" :submitted="submitted" />
 

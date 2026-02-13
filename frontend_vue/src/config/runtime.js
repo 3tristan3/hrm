@@ -1,3 +1,4 @@
+// runtime 文件，实现对应模块能力。
 const trimTrailingSlash = (value) => String(value || "").replace(/\/+$/, "");
 
 const getDefaultOrigin = () => {
@@ -45,3 +46,4 @@ export const PREWARM_REGION_LIMIT = parsePositiveInt(
   import.meta.env.VITE_PREWARM_REGION_LIMIT,
   3
 );
+

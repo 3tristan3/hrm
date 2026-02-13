@@ -1,3 +1,4 @@
+"""Django 全局配置文件，定义数据库、中间件、静态资源与应用注册。"""
 from pathlib import Path
 import os
 

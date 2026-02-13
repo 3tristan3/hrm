@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：RegionExtraSection 文件，实现对应模块能力。 -->
   <section v-if="regionFields.length" class="section-card">
     <div class="section-header">
       <div>

@@ -1,5 +1,7 @@
+"""DRF 序列化器定义，负责接口参数校验与响应结构组装。"""
 from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 
@@ -381,6 +383,7 @@ class ApplicationAdminListSerializer(ApplicationAdminPhotoMixin):
 class ApplicationAdminSerializer(ApplicationAdminPhotoMixin):
     region_name = serializers.CharField(source="region.name", read_only=True)
     job_title = serializers.CharField(source="job.title", read_only=True)
+    attachments = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -433,10 +436,28 @@ class ApplicationAdminSerializer(ApplicationAdminPhotoMixin):
             "photo_url",
             "created_at",
             "extra_fields",
+            "attachments",
+        ]
+
+    def get_attachments(self, obj):
+        attachments = obj.attachments.all().order_by("-created_at", "-id")
+        return [
+            {
+                "id": attachment.id,
+                "category": attachment.category,
+                "category_label": attachment.get_category_display(),
+                "file_url": self._file_url(attachment.file),
+                "file_name": str(attachment.file.name or "").split("/")[-1],
+                "created_at": attachment.created_at,
+            }
+            for attachment in attachments
+            if attachment.file
         ]
 
 
 class InterviewCandidateBatchAddSerializer(serializers.Serializer):
+    """批量加入拟面试人员入参。"""
+
     application_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
@@ -450,6 +471,8 @@ class InterviewCandidateBatchAddSerializer(serializers.Serializer):
 
 
 class InterviewCandidateBatchRemoveSerializer(serializers.Serializer):
+    """批量移出拟面试人员入参。"""
+
     interview_candidate_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
@@ -463,6 +486,8 @@ class InterviewCandidateBatchRemoveSerializer(serializers.Serializer):
 
 
 class InterviewCandidateListSerializer(serializers.ModelSerializer):
+    """拟面试人员列表输出，包含应聘主信息和当前面试状态。"""
+
     application_id = serializers.IntegerField(source="application.id", read_only=True)
     name = serializers.CharField(source="application.name", read_only=True)
     phone = serializers.CharField(source="application.phone", read_only=True)
@@ -484,6 +509,14 @@ class InterviewCandidateListSerializer(serializers.ModelSerializer):
             "region_name",
             "job_title",
             "status",
+            "interview_round",
+            "interview_at",
+            "interviewer",
+            "interview_location",
+            "result",
+            "score",
+            "result_note",
+            "result_at",
             "note",
             "photo_url",
             "created_at",
@@ -508,6 +541,102 @@ class InterviewCandidateListSerializer(serializers.ModelSerializer):
         return build_public_file_url(attachment.file, request=request)
 
 
+class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
+    """面试通过人员列表输出，聚合一到三轮快照字段。"""
+
+    name = serializers.CharField(source="application.name", read_only=True)
+    phone = serializers.CharField(source="application.phone", read_only=True)
+    recruit_type = serializers.CharField(source="application.recruit_type", read_only=True)
+    education_level = serializers.CharField(source="application.education_level", read_only=True)
+    region_name = serializers.CharField(source="application.region.name", read_only=True)
+    job_title = serializers.CharField(source="application.job.title", read_only=True)
+    first_round_at = serializers.SerializerMethodField()
+    first_round_score = serializers.SerializerMethodField()
+    first_round_interviewer = serializers.SerializerMethodField()
+    second_round_at = serializers.SerializerMethodField()
+    second_round_score = serializers.SerializerMethodField()
+    second_round_interviewer = serializers.SerializerMethodField()
+    third_round_at = serializers.SerializerMethodField()
+    third_round_score = serializers.SerializerMethodField()
+    third_round_interviewer = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InterviewCandidate
+        fields = [
+            "id",
+            "name",
+            "job_title",
+            "region_name",
+            "phone",
+            "recruit_type",
+            "education_level",
+            "first_round_at",
+            "first_round_score",
+            "first_round_interviewer",
+            "second_round_at",
+            "second_round_score",
+            "second_round_interviewer",
+            "third_round_at",
+            "third_round_score",
+            "third_round_interviewer",
+        ]
+
+    def _round_record_map(self, obj):
+        """构建轮次到记录的映射并缓存，避免重复遍历。"""
+        cached = getattr(obj, "_cached_round_record_map", None)
+        if cached is not None:
+            return cached
+        records = list(getattr(obj, "round_records").all())
+        record_map = {}
+        for record in records:
+            if record.round_no not in record_map:
+                record_map[record.round_no] = record
+        setattr(obj, "_cached_round_record_map", record_map)
+        return record_map
+
+    def _round_record(self, obj, round_no):
+        return self._round_record_map(obj).get(round_no)
+
+    def _round_interview_at(self, obj, round_no):
+        record = self._round_record(obj, round_no)
+        return record.interview_at if record else None
+
+    def _round_score(self, obj, round_no):
+        record = self._round_record(obj, round_no)
+        return record.score if record else None
+
+    def _round_interviewer(self, obj, round_no):
+        record = self._round_record(obj, round_no)
+        return record.interviewer if record else ""
+
+    def get_first_round_at(self, obj):
+        return self._round_interview_at(obj, 1)
+
+    def get_first_round_score(self, obj):
+        return self._round_score(obj, 1)
+
+    def get_first_round_interviewer(self, obj):
+        return self._round_interviewer(obj, 1)
+
+    def get_second_round_at(self, obj):
+        return self._round_interview_at(obj, 2)
+
+    def get_second_round_score(self, obj):
+        return self._round_score(obj, 2)
+
+    def get_second_round_interviewer(self, obj):
+        return self._round_interviewer(obj, 2)
+
+    def get_third_round_at(self, obj):
+        return self._round_interview_at(obj, 3)
+
+    def get_third_round_score(self, obj):
+        return self._round_score(obj, 3)
+
+    def get_third_round_interviewer(self, obj):
+        return self._round_interviewer(obj, 3)
+
+
 class ApplicationAttachmentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
 
@@ -523,6 +652,34 @@ class ApplicationAttachmentSerializer(serializers.ModelSerializer):
 class ApplicationAttachmentUploadSerializer(serializers.Serializer):
     category = serializers.ChoiceField(choices=ApplicationAttachment.CATEGORY_CHOICES)
     file = serializers.FileField()
+
+
+class InterviewCandidateScheduleSerializer(serializers.Serializer):
+    """安排/改期面试入参。"""
+
+    interview_at = serializers.DateTimeField(input_formats=["%Y-%m-%dT%H:%M", "iso-8601"])
+    interviewer = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    interview_location = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    note = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_interview_at(self, value):
+        if value < timezone.now():
+            raise serializers.ValidationError("面试时间不能早于当前时间")
+        return value
+
+
+class InterviewCandidateCancelScheduleSerializer(serializers.Serializer):
+    """取消安排入参。"""
+
+    note = serializers.CharField(required=False, allow_blank=True)
+
+
+class InterviewCandidateResultSerializer(serializers.Serializer):
+    """面试结果录入入参。"""
+
+    result = serializers.ChoiceField(choices=InterviewCandidate.RESULT_CHOICES)
+    score = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    result_note = serializers.CharField(required=False, allow_blank=True)
 
 
 User = get_user_model()

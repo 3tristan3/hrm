@@ -1,3 +1,4 @@
+/* style 文件，实现对应模块能力。 */
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 
 :root {
@@ -346,6 +347,25 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 .form-actions.right {
   justify-content: flex-end;
 }
+.schedule-form-actions {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.schedule-form-actions-left,
+.schedule-form-actions-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.schedule-form-actions-left {
+  padding-right: 10px;
+}
+.schedule-form-actions-right {
+  margin-left: auto;
+}
 
 /* 按钮 */
 .btn {
@@ -418,6 +438,31 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 .data-table thead {
   background: #F1F5F9;
   color: var(--text-sub);
+}
+.th-sort {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  cursor: pointer;
+}
+.th-sort:hover {
+  color: var(--primary-dark);
+}
+.sort-triangles {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 0.9;
+  font-size: 9px;
+  color: #94A3B8;
+}
+.sort-triangles .active {
+  color: var(--primary);
 }
 .data-table tbody tr:hover {
   background: #F8FAFC;
@@ -591,6 +636,18 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 .chip.subtle {
   background: rgba(15,23,42,0.08);
   color: var(--text-sub);
+}
+.chip.chip-subtle {
+  background: rgba(15,23,42,0.08);
+  color: var(--text-sub);
+}
+.chip.chip-scheduled {
+  background: rgba(34,197,94,0.2);
+  color: #166534;
+}
+.chip.chip-pending {
+  background: rgba(245, 158, 11, 0.2);
+  color: #92400E;
 }
 .account-panels {
   display: grid;
@@ -1039,9 +1096,20 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 .interview-table td:first-child {
   text-align: center;
 }
+.passed-table-wrap {
+  min-height: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: auto;
+}
+.passed-table th,
+.passed-table td {
+  white-space: nowrap;
+}
 .job-card,
 .applications-card,
-.interview-card {
+.interview-card,
+.passed-card {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1049,14 +1117,16 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
 }
 .job-card .card-body,
 .applications-card .card-body,
-.interview-card .card-body {
+.interview-card .card-body,
+.passed-card .card-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 .applications-scroll,
-.interviews-scroll {
+.interviews-scroll,
+.passed-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -1213,18 +1283,149 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   padding: 10px 12px;
   border: 1px dashed #CBD5E1;
 }
+.detail-attachments-section {
+  border-color: #BFDBFE;
+  background: linear-gradient(180deg, #F8FBFF 0%, #FFFFFF 78%);
+}
+.detail-attachments-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.detail-attachment-card {
+  border: 1px solid #DBEAFE;
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.detail-attachment-card:hover {
+  border-color: #93C5FD;
+  box-shadow: 0 8px 18px rgba(30, 64, 175, 0.12);
+  transform: translateY(-1px);
+}
+.detail-attachment-card:focus-visible {
+  outline: 2px solid #60A5FA;
+  outline-offset: 2px;
+}
+.detail-attachment-card.missing,
+.detail-attachment-card:disabled {
+  cursor: not-allowed;
+  border-color: #E5E7EB;
+  background: #F8FAFC;
+  box-shadow: none;
+  transform: none;
+}
+.detail-attachment-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #E0F2FE;
+  color: #0E7490;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.detail-attachment-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.detail-attachment-preview {
+  width: 62px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid #DBEAFE;
+  background: #F0F9FF;
+  color: #0C4A6E;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.detail-attachment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.detail-attachment-preview.placeholder {
+  border-style: dashed;
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+  color: #94A3B8;
+}
+.detail-attachment-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+}
+.detail-attachment-hint {
+  font-size: 12px;
+  color: #64748B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail-attachment-action {
+  margin-left: auto;
+  font-size: 12px;
+  color: #2563EB;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.detail-attachment-card.missing .detail-attachment-action {
+  color: #94A3B8;
+}
+.detail-attachments-extra {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #CBD5E1;
+}
+.detail-attachments-extra-list {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-attachment-link {
+  border: 1px solid #D1D5DB;
+  border-radius: 999px;
+  background: #F8FAFC;
+  color: #334155;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease, background .2s ease;
+}
+.detail-attachment-link:hover {
+  border-color: #93C5FD;
+  color: #1D4ED8;
+  background: #EFF6FF;
+}
 
 @media (max-width: 1200px) {
   .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .form-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-attachments-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
   .sidebar { display: none; }
   .content-body { padding: 16px; }
   .job-card,
   .applications-card,
-  .interview-card {
+  .interview-card,
+  .passed-card {
     height: calc(100vh - var(--header-height) - 36px);
   }
   .auth-box { width: 100%; max-width: 420px; }
@@ -1244,7 +1445,22 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   .detail-header { flex-direction: column; align-items: flex-start; }
   .detail-modal { max-height: 92vh; }
   .detail-grid { grid-template-columns: 1fr; }
+  .detail-attachments-grid { grid-template-columns: 1fr; }
   .card-info-grid { grid-template-columns: 1fr; }
+  .schedule-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .schedule-form-actions-left,
+  .schedule-form-actions-right {
+    width: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+    padding-right: 0;
+  }
+  .schedule-form-actions-left {
+    justify-content: flex-start;
+  }
 }
 
 /* 补充样式：文本截断 */
@@ -1267,3 +1483,4 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   color: var(--text-sub);
   margin-bottom: 6px;
 }
+

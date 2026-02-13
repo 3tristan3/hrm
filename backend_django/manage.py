@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""Django 项目管理入口，提供运行服务、迁移、测试等命令。"""
 import os
 import sys
 

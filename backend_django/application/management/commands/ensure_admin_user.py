@@ -1,3 +1,4 @@
+"""ensure_admin_user 文件，实现对应模块能力。"""
 import os
 
 from django.contrib.auth import get_user_model

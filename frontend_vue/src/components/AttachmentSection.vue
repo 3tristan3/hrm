@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：AttachmentSection 文件，实现对应模块能力。 -->
   <section class="section-card" :key="fileInputKey">
     <div class="section-header">
       <div>

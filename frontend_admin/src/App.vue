@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：管理后台主页面，组织标签页、数据加载与主要业务交互。 -->
   <!-- 全局组件挂载点 -->
   <Toast ref="toastRef" />
   <ConfirmDialog ref="confirmRef" />
@@ -442,109 +443,68 @@
           </div>
         </div>
 
-        <div v-else-if="activeTab === 'interviews'" class="card interview-card">
-          <div class="card-header interview-header">
-            <div>
-              <h3>拟面试人员</h3>
-              <p class="header-sub">显示 {{ filteredInterviewCandidates.length }} / {{ interviewCandidates.length }} 人</p>
-            </div>
-            <div class="applications-header-actions">
-              <span class="chip subtle">已选 {{ selectedInterviewCount }} 人</span>
-              <button
-                class="btn btn-sm btn-danger"
-                type="button"
-                :disabled="selectedInterviewCount === 0"
-                @click="batchRemoveInterviewCandidates"
-              >
-                批量移出<span v-if="selectedInterviewCount">（{{ selectedInterviewCount }}）</span>
-              </button>
-              <button class="btn btn-sm btn-default" type="button" @click="refreshInterviewCandidates">刷新列表</button>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="application-toolbar">
-              <div class="job-tabs">
-                <button
-                  v-for="job in interviewJobCategories"
-                  :key="job.value"
-                  class="tab-pill"
-                  :class="{ active: interviewFilters.job === job.value }"
-                  @click="interviewFilters.job = job.value"
-                >
-                  {{ job.label }}
-                  <span class="tab-count">{{ job.count }}</span>
-                </button>
-              </div>
-              <div class="filter-actions">
-                <div v-if="showRegionFilter" class="filter-field">
-                  <label>地区筛选</label>
-                  <div class="input-with-icon">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-                      <circle cx="11" cy="11" r="7"></circle>
-                      <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
-                    </svg>
-                    <select v-model="interviewFilters.region">
-                      <option value="">全部地区</option>
-                      <option v-for="item in regions" :key="item.id" :value="item.name">{{ item.name }}</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="filter-field">
-                  <div class="input-with-icon">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-                      <circle cx="11" cy="11" r="7"></circle>
-                      <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
-                    </svg>
-                    <input v-model.trim="interviewFilters.keyword" placeholder="姓名/手机号" />
-                  </div>
-                </div>
-                <button class="btn btn-sm btn-default" @click="resetInterviewFilters">重置筛选</button>
-              </div>
-            </div>
-            <div class="interviews-scroll">
-              <div v-if="filteredInterviewCandidates.length" class="interview-table-wrap">
-                <table class="data-table interview-table">
-                  <thead>
-                    <tr>
-                      <th width="6%">
-                        <input type="checkbox" v-model="isAllVisibleInterviewsSelected" />
-                      </th>
-                      <th>姓名</th>
-                      <th>岗位</th>
-                      <th>地区</th>
-                      <th>手机号</th>
-                      <th>招聘类型</th>
-                      <th>学历</th>
-                      <th>加入时间</th>
-                      <th>状态</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in filteredInterviewCandidates" :key="item.id">
-                      <td>
-                        <input type="checkbox" :value="item.id" v-model="selectedInterviewIds" />
-                      </td>
-                      <td class="font-medium">{{ item.name || "-" }}</td>
-                      <td>{{ item.job_title || "-" }}</td>
-                      <td>{{ item.region_name || "-" }}</td>
-                      <td>{{ item.phone || "-" }}</td>
-                      <td>{{ item.recruit_type || "-" }}</td>
-                      <td>{{ item.education_level || "-" }}</td>
-                      <td>{{ formatTime(item.created_at) }}</td>
-                      <td><span class="chip subtle">{{ item.status || "待安排" }}</span></td>
-                      <td class="action-cell">
-                        <button class="btn btn-xs btn-default" type="button" @click="openApplicationFromInterview(item)">查看详情</button>
-                        <button class="btn btn-xs btn-danger" type="button" @click="removeInterviewCandidate(item)">移出</button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div v-else class="empty-state">暂无拟面试人员</div>
-            </div>
-          </div>
-        </div>
+        <InterviewCandidatesModule
+          v-else-if="activeTab === 'interviews'"
+          :filtered-interview-candidates="filteredInterviewCandidates"
+          :interview-candidates="interviewCandidates"
+          :selected-interview-count="selectedInterviewCount"
+          :selected-interview-ids="selectedInterviewIds"
+          :is-all-visible-interviews-selected="isAllVisibleInterviewsSelected"
+          :interview-job-categories="interviewJobCategories"
+          :interview-filters="interviewFilters"
+          :show-region-filter="showRegionFilter"
+          :regions="regions"
+          :sorted-interview-candidates="sortedInterviewCandidates"
+          :interview-time-sort="interviewTimeSort"
+          :interview-meta="interviewMeta"
+          :interview-result-options="interviewResultOptions"
+          :show-interview-schedule-form="showInterviewScheduleForm"
+          :show-interview-result-form="showInterviewResultForm"
+          :interview-schedule-has-existing="interviewScheduleHasExisting"
+          :schedule-saving="scheduleSaving"
+          :result-saving="resultSaving"
+          :interview-schedule-form="interviewScheduleForm"
+          :interview-result-form="interviewResultForm"
+          :interview-round-hint="interviewRoundHint"
+          :format-time="formatTime"
+          :interview-status-class="interviewStatusClass"
+          :interview-status-text="interviewStatusText"
+          :can-schedule-interview="canScheduleInterview"
+          :schedule-action-label="scheduleActionLabel"
+          @update:selected-interview-ids="selectedInterviewIds = $event"
+          @update:is-all-visible-interviews-selected="isAllVisibleInterviewsSelected = $event"
+          @refresh="refreshInterviewCandidates"
+          @batch-remove="batchRemoveInterviewCandidates"
+          @reset-filters="resetInterviewFilters"
+          @toggle-time-sort="toggleInterviewTimeSort"
+          @open-schedule="openInterviewSchedule"
+          @open-result="openInterviewResult"
+          @open-detail="openApplicationFromInterview"
+          @remove="removeInterviewCandidate"
+          @close-schedule="closeInterviewSchedule"
+          @save-schedule="saveInterviewSchedule"
+          @cancel-schedule-from-form="cancelInterviewScheduleFromForm"
+          @close-result="closeInterviewResult"
+          @save-result="saveInterviewResult"
+        />
+
+        <InterviewPassedCard
+          v-else-if="activeTab === 'passed'"
+          :items="passedCandidates"
+          title="面试通过人员"
+          count-prefix="已通过"
+          empty-text="暂无面试通过人员"
+          @refresh="refreshPassedCandidates"
+        />
+
+        <InterviewPassedCard
+          v-else-if="activeTab === 'talent'"
+          :items="talentPoolCandidates"
+          title="人才库"
+          count-prefix="已入库"
+          empty-text="暂无人才库人员"
+          @refresh="refreshTalentPoolCandidates"
+        />
 
         <div v-else class="card">
           <div class="card-body">暂无内容</div>
@@ -588,6 +548,54 @@
                 <div v-for="block in section.blocks" :key="block.label">
                   <div class="detail-label">{{ block.label }}</div>
                   <div class="detail-multiline">{{ block.value }}</div>
+                </div>
+              </div>
+            </div>
+            <div class="detail-section detail-attachments-section">
+              <div class="section-title">证件与附件</div>
+              <div class="detail-attachments-grid">
+                <button
+                  v-for="card in keyAttachmentCards"
+                  :key="card.key"
+                  type="button"
+                  class="detail-attachment-card"
+                  :class="{ missing: !card.url }"
+                  :disabled="!card.url"
+                  @click="openAttachment(card.url)"
+                >
+                  <span class="detail-attachment-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                  </span>
+                  <span class="detail-attachment-main">
+                    <span class="detail-attachment-title">{{ card.label }}</span>
+                    <span class="detail-attachment-hint">{{ card.hint }}</span>
+                  </span>
+                  <span class="detail-attachment-preview" :class="{ placeholder: !card.url }" aria-hidden="true">
+                    <img
+                      v-if="card.url && card.isImage"
+                      :src="resolveMediaUrl(card.url)"
+                      :alt="`${card.label}预览`"
+                    />
+                    <span v-else>{{ card.previewTag }}</span>
+                  </span>
+                  <span class="detail-attachment-action">{{ card.url ? "查看文件" : "未上传" }}</span>
+                </button>
+              </div>
+              <div v-if="otherAttachmentFiles.length" class="detail-attachments-extra">
+                <div class="detail-label">其他附件</div>
+                <div class="detail-attachments-extra-list">
+                  <button
+                    v-for="item in otherAttachmentFiles"
+                    :key="item.id"
+                    type="button"
+                    class="detail-attachment-link"
+                    @click="openAttachment(item.file_url)"
+                  >
+                    {{ item.category_label || item.category || "附件" }} · {{ item.file_name || "点击查看" }}
+                  </button>
                 </div>
               </div>
             </div>
@@ -667,16 +675,21 @@
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-// 引入新拆分的组件
+// 业务模块组件
 import UISwitch from './components/UISwitch.vue';
 import Toast from './components/Toast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
+import InterviewCandidatesModule from './components/InterviewCandidatesModule.vue';
+import InterviewPassedCard from './components/InterviewPassedCard.vue';
 import { buildApiUrl, resolveAssetUrl } from "./config/runtime";
+import { useJobCategoryFilter } from "./composables/useJobCategoryFilter";
+import { createInterviewApi } from "./api/interview";
 
 const toastRef = ref(null);
 const confirmRef = ref(null);
@@ -685,6 +698,52 @@ const confirmRef = ref(null);
 const adminBase = buildApiUrl("api/admin");
 const authBase = buildApiUrl("api/auth");
 const resolveMediaUrl = (url) => resolveAssetUrl(url);
+
+// 面试常量默认值：接口未返回时仍可保证前端可运行
+const defaultInterviewMeta = Object.freeze({
+  status_pending: "待安排",
+  status_scheduled: "已安排",
+  status_completed: "已完成",
+  result_pending: "待定",
+  result_next_round: "进入下一轮",
+  result_pass: "通过",
+  result_reject: "淘汰",
+  status_choices: [
+    { value: "待安排", label: "待安排" },
+    { value: "已安排", label: "已安排" },
+    { value: "已完成", label: "已完成" },
+  ],
+  result_choices: [
+    { value: "进入下一轮", label: "进入下一轮" },
+    { value: "通过", label: "通过" },
+    { value: "淘汰", label: "淘汰" },
+    { value: "待定", label: "待定" },
+  ],
+  final_results: ["通过", "淘汰"],
+  max_round: 3,
+});
+
+const createInterviewMeta = (payload = {}) => {
+  // 兜底和类型收敛，避免后端字段缺失导致前端判定异常
+  const merged = { ...defaultInterviewMeta, ...(payload || {}) };
+  const maxRound = Number(merged.max_round);
+  return {
+    ...merged,
+    status_choices:
+      Array.isArray(merged.status_choices) && merged.status_choices.length
+        ? merged.status_choices
+        : defaultInterviewMeta.status_choices,
+    result_choices:
+      Array.isArray(merged.result_choices) && merged.result_choices.length
+        ? merged.result_choices
+        : defaultInterviewMeta.result_choices,
+    final_results:
+      Array.isArray(merged.final_results) && merged.final_results.length
+        ? merged.final_results
+        : defaultInterviewMeta.final_results,
+    max_round: Number.isFinite(maxRound) && maxRound > 0 ? Math.floor(maxRound) : defaultInterviewMeta.max_round,
+  };
+};
 
 // === 状态管理 ===
 const token = ref(localStorage.getItem("admin_token") || "");
@@ -697,6 +756,8 @@ const tabs = [
   { key: "jobs", label: "岗位管理", adminOnly: false },
   { key: "applications", label: "应聘记录", adminOnly: false },
   { key: "interviews", label: "拟面试人员", adminOnly: false },
+  { key: "passed", label: "面试通过人员", adminOnly: false },
+  { key: "talent", label: "人才库", adminOnly: false },
   { key: "accounts", label: "账号管理", adminOnly: true },
 ];
 
@@ -708,53 +769,99 @@ const selectedJobIds = ref([]);
 const selectedApplicationIds = ref([]);
 const selectedInterviewIds = ref([]);
 const showJobForm = ref(false);
+const showInterviewScheduleForm = ref(false);
+const showInterviewResultForm = ref(false);
+const interviewScheduleHasExisting = ref(false);
+const scheduleSaving = ref(false);
+const resultSaving = ref(false);
+const interviewTimeSort = ref("none");
 const applicationFilters = reactive({ job: "all", region: "" });
 const interviewFilters = reactive({ job: "all", region: "", keyword: "" });
+const interviewScheduleForm = reactive({
+  id: null,
+  name: "",
+  interview_round: 1,
+  interview_at: "",
+  interviewer: "",
+  interview_location: "",
+  note: "",
+});
+const interviewResultForm = reactive({
+  id: null,
+  name: "",
+  interview_round: 1,
+  status: "",
+  result: defaultInterviewMeta.result_next_round,
+  score: null,
+  result_note: "",
+});
 
 const publicRegions = ref([]);
 const regions = ref([]);
 const jobs = ref([]);
 const applications = ref([]);
 const interviewCandidates = ref([]);
+const passedCandidates = ref([]);
+const talentPoolCandidates = ref([]);
+const interviewMeta = reactive(createInterviewMeta());
 const users = ref([]);
 const userProfile = reactive({ can_view_all: false, region_name: "", region_id: null, is_superuser: false });
 const activeApplication = ref(null);
 const applicationDetailLoading = ref(false);
-const dataLoaded = reactive({ regions: false, jobs: false, applications: false, interviews: false, users: false });
-const dataLoading = reactive({ regions: false, jobs: false, applications: false, interviews: false, users: false });
+const dataLoaded = reactive({ regions: false, jobs: false, applications: false, interviews: false, passed: false, talent: false, interviewMeta: false, users: false });
+const dataLoading = reactive({ regions: false, jobs: false, applications: false, interviews: false, passed: false, talent: false, interviewMeta: false, users: false });
 
 // === 计算属性 ===
 const visibleTabs = computed(() =>
   tabs.filter((tab) => (tab.adminOnly ? userProfile.is_superuser : true))
 );
+const interviewRoundHint = computed(() => {
+  const round = Math.max(Number(interviewScheduleForm.interview_round || 1), 1);
+  if (interviewScheduleHasExisting.value) {
+    return `第${round}轮（改期）`;
+  }
+  return `第${round}轮（自动）`;
+});
+const interviewResultOptions = computed(() => {
+  const preferredOrder = [
+    interviewMeta.result_next_round,
+    interviewMeta.result_pass,
+    interviewMeta.result_reject,
+    interviewMeta.result_pending,
+  ].filter(Boolean);
+  const source = Array.isArray(interviewMeta.result_choices) ? interviewMeta.result_choices : [];
+  const byValue = new Map(source.map((item) => [item.value, item]));
+  const ordered = preferredOrder
+    .filter((value) => byValue.has(value))
+    .map((value) => byValue.get(value));
+  source.forEach((item) => {
+    if (!ordered.find((v) => v.value === item.value)) {
+      ordered.push(item);
+    }
+  });
+  return ordered.length
+    ? ordered
+    : defaultInterviewMeta.result_choices.map((item) => ({ ...item }));
+});
 const currentTitle = computed(
   () => visibleTabs.value.find((t) => t.key === activeTab.value)?.label || "管理后台"
 );
 const userInitial = computed(() => (currentUsername.value ? currentUsername.value[0].toUpperCase() : "A"));
 const showRegionFilter = computed(() => userProfile.can_view_all || userProfile.is_superuser);
-const regionFilteredApplications = computed(() => {
-  const regionKeyword = applicationFilters.region.trim().toLowerCase();
-  return applications.value.filter((item) => {
-    const regionValue = (item.region_name || "").toLowerCase();
-    return !regionKeyword || regionValue === regionKeyword;
-  });
-});
-const jobCategories = computed(() => {
-  const counts = new Map();
-  regionFilteredApplications.value.forEach((item) => {
-    const title = item.job_title || "未填写岗位";
-    counts.set(title, (counts.get(title) || 0) + 1);
-  });
-  const categories = Array.from(counts.entries())
-    .map(([title, count]) => ({ label: title, value: title, count }))
-    .sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN"));
-  return [{ label: "全部岗位", value: "all", count: regionFilteredApplications.value.length }, ...categories];
-});
-const filteredApplications = computed(() => {
-  const jobKeyword = applicationFilters.job;
-  if (jobKeyword === "all") return regionFilteredApplications.value;
-  return regionFilteredApplications.value.filter((item) => (item.job_title || "未填写岗位") === jobKeyword);
-});
+const { jobCategories, filteredItems: filteredApplications } = useJobCategoryFilter(
+  applications,
+  applicationFilters,
+  {
+    titleKey: "job_title",
+    regionKey: "region_name",
+    jobFilterKey: "job",
+    regionFilterKey: "region",
+    allValue: "all",
+    allLabel: "全部岗位",
+    unknownJobLabel: "未填写岗位",
+  }
+);
+
 const groupedApplications = computed(() => {
   const groups = new Map();
   filteredApplications.value.forEach((item) => {
@@ -767,38 +874,38 @@ const groupedApplications = computed(() => {
     .sort((a, b) => a.title.localeCompare(b.title, "zh-Hans-CN"));
 });
 
-const regionFilteredInterviewCandidates = computed(() => {
-  const regionKeyword = interviewFilters.region.trim().toLowerCase();
-  return interviewCandidates.value.filter((item) => {
-    const regionValue = (item.region_name || "").toLowerCase();
-    return !regionKeyword || regionValue === regionKeyword;
+const { jobCategories: interviewJobCategories, filteredItems: filteredInterviewCandidates } =
+  useJobCategoryFilter(interviewCandidates, interviewFilters, {
+    titleKey: "job_title",
+    regionKey: "region_name",
+    jobFilterKey: "job",
+    regionFilterKey: "region",
+    keywordFilterKey: "keyword",
+    keywordFields: ["name", "phone"],
+    allValue: "all",
+    allLabel: "全部岗位",
+    unknownJobLabel: "未填写岗位",
   });
-});
 
-const interviewJobCategories = computed(() => {
-  const counts = new Map();
-  regionFilteredInterviewCandidates.value.forEach((item) => {
-    const title = item.job_title || "未填写岗位";
-    counts.set(title, (counts.get(title) || 0) + 1);
-  });
-  const categories = Array.from(counts.entries())
-    .map(([title, count]) => ({ label: title, value: title, count }))
-    .sort((a, b) => a.label.localeCompare(b.label, "zh-Hans-CN"));
-  return [{ label: "全部岗位", value: "all", count: regionFilteredInterviewCandidates.value.length }, ...categories];
-});
+const sortedInterviewCandidates = computed(() => {
+  const list = [...filteredInterviewCandidates.value];
+  if (interviewTimeSort.value === "none") return list;
 
-const filteredInterviewCandidates = computed(() => {
-  const keyword = interviewFilters.keyword.trim().toLowerCase();
-  let result = regionFilteredInterviewCandidates.value;
-  if (interviewFilters.job !== "all") {
-    result = result.filter((item) => (item.job_title || "未填写岗位") === interviewFilters.job);
-  }
-  if (!keyword) return result;
-  return result.filter((item) => {
-    const name = (item.name || "").toLowerCase();
-    const phone = String(item.phone || "").toLowerCase();
-    return name.includes(keyword) || phone.includes(keyword);
+  const getTimestamp = (value) => {
+    if (!value) return null;
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? null : time;
+  };
+
+  list.sort((a, b) => {
+    const aTime = getTimestamp(a.interview_at);
+    const bTime = getTimestamp(b.interview_at);
+    if (aTime === null && bTime === null) return 0;
+    if (aTime === null) return 1;
+    if (bTime === null) return -1;
+    return interviewTimeSort.value === "asc" ? aTime - bTime : bTime - aTime;
   });
+  return list;
 });
 
 const selectedJobsCount = computed(() => selectedJobIds.value.length);
@@ -832,8 +939,6 @@ const isAllVisibleInterviewsSelected = computed({
 // === API 请求封装 ===
 const extractErrorMessage = (payload) => {
   if (!payload || typeof payload !== "object") return "请求失败";
-  if (payload.error) return payload.error;
-  if (payload.detail) return payload.detail;
   if (payload.details) {
     if (typeof payload.details === "string") return payload.details;
     const detailKeys = Object.keys(payload.details);
@@ -843,6 +948,8 @@ const extractErrorMessage = (payload) => {
       if (typeof val === "string") return val;
     }
   }
+  if (payload.detail) return payload.detail;
+  if (payload.error) return payload.error;
   const keys = Object.keys(payload);
   if (keys.length) {
     const val = payload[keys[0]];
@@ -852,6 +959,20 @@ const extractErrorMessage = (payload) => {
   return "请求失败";
 };
 
+const errorCodeMessageMap = Object.freeze({
+  INTERVIEW_FLOW_CLOSED: "当前面试流程已结束，无法继续安排",
+  INTERVIEW_NOT_SCHEDULED: "当前未安排面试",
+  INTERVIEW_NOT_SCHEDULED_FOR_RESULT: "请先安排面试后再记录结果",
+  INTERVIEW_ROUND_LIMIT_REACHED: "当前已是最后一轮，不能再进入下一轮",
+});
+
+const createApiError = (payload, fallback = "请求失败") => {
+  const error = new Error(extractErrorMessage(payload) || fallback);
+  error.code = payload?.error_code || "";
+  error.payload = payload;
+  return error;
+};
+
 const request = async (url, options = {}) => {
   const headers = { "Content-Type": "application/json" };
   if (token.value) headers.Authorization = `Token ${token.value}`;
@@ -859,15 +980,18 @@ const request = async (url, options = {}) => {
   const response = await fetch(url, { headers, ...options });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(extractErrorMessage(payload));
+    throw createApiError(payload);
   }
   return response.status === 204 ? {} : response.json();
 };
 
+const interviewApi = createInterviewApi({ adminBase, request });
+
 const notifyError = (err) => {
   console.error(err);
-  // 修正：使用自定义 Toast
-  toastRef.value?.show(err.message || "操作失败", 'error');
+  const code = typeof err?.code === "string" ? err.code : "";
+  const mapped = code ? errorCodeMessageMap[code] : "";
+  toastRef.value?.show(mapped || err?.message || "操作失败", "error");
 };
 const notifySuccess = (msg) => {
   toastRef.value?.show(msg, 'success');
@@ -936,11 +1060,12 @@ const loadApplications = async (force = false) => {
 };
 
 const loadInterviewCandidates = async (force = false) => {
+  // 拉取拟面试池，同时清理已失效的选中项
   if (dataLoading.interviews) return;
   if (!force && dataLoaded.interviews) return;
   dataLoading.interviews = true;
   try {
-    interviewCandidates.value = await request(`${adminBase}/interview-candidates/`);
+    interviewCandidates.value = await interviewApi.listCandidates();
     const availableIds = new Set(interviewCandidates.value.map((item) => item.id));
     selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => availableIds.has(id));
     const availableJobs = interviewJobCategories.value.map((item) => item.value);
@@ -952,6 +1077,52 @@ const loadInterviewCandidates = async (force = false) => {
     notifyError(err);
   } finally {
     dataLoading.interviews = false;
+  }
+};
+
+const loadInterviewMeta = async (force = false) => {
+  // 从后端同步面试状态/结果枚举，统一前后端规则
+  if (dataLoading.interviewMeta) return;
+  if (!force && dataLoaded.interviewMeta) return;
+  dataLoading.interviewMeta = true;
+  try {
+    const payload = await interviewApi.getMeta();
+    Object.assign(interviewMeta, createInterviewMeta(payload));
+    dataLoaded.interviewMeta = true;
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    dataLoading.interviewMeta = false;
+  }
+};
+
+const loadPassedCandidates = async (force = false) => {
+  // 拉取面试通过人员（含多轮历史快照）
+  if (dataLoading.passed) return;
+  if (!force && dataLoaded.passed) return;
+  dataLoading.passed = true;
+  try {
+    passedCandidates.value = await interviewApi.listPassedCandidates();
+    dataLoaded.passed = true;
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    dataLoading.passed = false;
+  }
+};
+
+const loadTalentPoolCandidates = async (force = false) => {
+  // 拉取人才库（面试淘汰人员，含多轮历史快照）
+  if (dataLoading.talent) return;
+  if (!force && dataLoaded.talent) return;
+  dataLoading.talent = true;
+  try {
+    talentPoolCandidates.value = await interviewApi.listTalentPoolCandidates();
+    dataLoaded.talent = true;
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    dataLoading.talent = false;
   }
 };
 
@@ -971,6 +1142,7 @@ const loadUsers = async (force = false) => {
 };
 
 const ensureTabData = async (tabKey, force = false) => {
+  // 按当前标签按需加载，减少无关接口请求
   if (!token.value) return;
   if (tabKey === "regions") {
     await loadRegions(force);
@@ -985,7 +1157,15 @@ const ensureTabData = async (tabKey, force = false) => {
     return;
   }
   if (tabKey === "interviews") {
-    await loadInterviewCandidates(force);
+    await Promise.all([loadInterviewMeta(force), loadInterviewCandidates(force)]);
+    return;
+  }
+  if (tabKey === "passed") {
+    await Promise.all([loadInterviewMeta(force), loadPassedCandidates(force)]);
+    return;
+  }
+  if (tabKey === "talent") {
+    await Promise.all([loadInterviewMeta(force), loadTalentPoolCandidates(force)]);
     return;
   }
   if (tabKey === "accounts") {
@@ -1020,7 +1200,7 @@ const submitAuth = async () => {
     });
     
     const payload = await res.json();
-    if (!res.ok) throw new Error(extractErrorMessage(payload));
+    if (!res.ok) throw createApiError(payload);
 
     token.value = payload.token;
     currentUsername.value = authForm.username;
@@ -1030,6 +1210,9 @@ const submitAuth = async () => {
     dataLoaded.jobs = false;
     dataLoaded.applications = false;
     dataLoaded.interviews = false;
+    dataLoaded.passed = false;
+    dataLoaded.talent = false;
+    dataLoaded.interviewMeta = false;
     dataLoaded.users = false;
 
     notifySuccess("登录成功");
@@ -1059,6 +1242,8 @@ const logout = async (silent = false) => {
     jobs.value = [];
     applications.value = [];
     interviewCandidates.value = [];
+    passedCandidates.value = [];
+    talentPoolCandidates.value = [];
     users.value = [];
     selectedApplicationIds.value = [];
     selectedInterviewIds.value = [];
@@ -1066,14 +1251,27 @@ const logout = async (silent = false) => {
     dataLoaded.jobs = false;
     dataLoaded.applications = false;
     dataLoaded.interviews = false;
+    dataLoaded.passed = false;
+    dataLoaded.talent = false;
+    dataLoaded.interviewMeta = false;
     dataLoaded.users = false;
     dataLoading.regions = false;
     dataLoading.jobs = false;
     dataLoading.applications = false;
     dataLoading.interviews = false;
+    dataLoading.passed = false;
+    dataLoading.talent = false;
+    dataLoading.interviewMeta = false;
     dataLoading.users = false;
+    Object.assign(interviewMeta, createInterviewMeta());
     activeApplication.value = null;
     applicationDetailLoading.value = false;
+    showInterviewScheduleForm.value = false;
+    scheduleSaving.value = false;
+    resetInterviewScheduleForm();
+    showInterviewResultForm.value = false;
+    resultSaving.value = false;
+    resetInterviewResultForm();
     resetApplicationFilters();
     resetInterviewFilters();
     userProfile.can_view_all = false;
@@ -1089,11 +1287,36 @@ const logout = async (silent = false) => {
 // === CRUD 操作 ===
 const regionName = (id) => regions.value.find(r => r.id === id)?.name || "-";
 const formatTime = (v) => v ? new Date(v).toLocaleString() : "-";
+const toDateTimeLocal = (v) => {
+  if (!v) return "";
+  const date = new Date(v);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 const formatDate = (v) => {
   if (!v) return "-";
   const date = new Date(v);
   if (Number.isNaN(date.getTime())) return v;
   return date.toLocaleDateString();
+};
+const interviewStatusClass = (item) => {
+  if (item?.status === interviewMeta.status_scheduled) return "chip-scheduled";
+  if (item?.result === interviewMeta.result_pending) return "chip-pending";
+  return "chip-subtle";
+};
+const interviewStatusText = (item) => {
+  if (item?.result === interviewMeta.result_pending) return interviewMeta.result_pending;
+  return item?.status || interviewMeta.status_pending;
+};
+const canScheduleInterview = (item) =>
+  !(
+    item.status === interviewMeta.status_completed &&
+    interviewMeta.final_results.includes(item.result || "")
+  );
+const scheduleActionLabel = (item) => {
+  if (!canScheduleInterview(item)) return "不可安排";
+  return item.interview_at ? "改期安排" : "安排面试";
 };
 const displayValue = (v) => {
   if (v === 0) return "0";
@@ -1320,6 +1543,195 @@ const resetInterviewFilters = () => {
   interviewFilters.job = "all";
   interviewFilters.region = "";
   interviewFilters.keyword = "";
+  interviewTimeSort.value = "none";
+};
+
+// 面试时间排序在“升序/降序”间切换
+const toggleInterviewTimeSort = () => {
+  interviewTimeSort.value = interviewTimeSort.value === "asc" ? "desc" : "asc";
+};
+
+const resetInterviewScheduleForm = () => {
+  Object.assign(interviewScheduleForm, {
+    id: null,
+    name: "",
+    interview_round: 1,
+    interview_at: "",
+    interviewer: "",
+    interview_location: "",
+    note: "",
+  });
+};
+
+const resetInterviewResultForm = () => {
+  Object.assign(interviewResultForm, {
+    id: null,
+    name: "",
+    interview_round: 1,
+    status: "",
+    result: interviewMeta.result_next_round,
+    score: null,
+    result_note: "",
+  });
+};
+
+// 打开安排面试弹窗：自动推导当前应安排轮次（仅展示）
+const openInterviewSchedule = (item) => {
+  activeApplication.value = null;
+  applicationDetailLoading.value = false;
+  interviewScheduleHasExisting.value = Boolean(
+    item.interview_at || item.status === interviewMeta.status_scheduled
+  );
+  const currentRound = Math.max(Number(item.interview_round || 1), 1);
+  const autoRound =
+    item.interview_at || item.status === interviewMeta.status_scheduled
+      ? currentRound
+      : item.status === interviewMeta.status_completed ||
+          (item.status === interviewMeta.status_pending &&
+            item.result === interviewMeta.result_next_round)
+        ? Math.min(currentRound + 1, interviewMeta.max_round)
+        : currentRound;
+  Object.assign(interviewScheduleForm, {
+    id: item.id,
+    name: item.name || "",
+    interview_round: autoRound,
+    interview_at: toDateTimeLocal(item.interview_at),
+    interviewer: item.interviewer || "",
+    interview_location: item.interview_location || "",
+    note: item.note || "",
+  });
+  showInterviewScheduleForm.value = true;
+};
+
+// 关闭安排弹窗并清理临时状态
+const closeInterviewSchedule = () => {
+  showInterviewScheduleForm.value = false;
+  interviewScheduleHasExisting.value = false;
+  scheduleSaving.value = false;
+  resetInterviewScheduleForm();
+};
+
+// 打开结果录入弹窗，带入当前轮次与历史评分
+const openInterviewResult = (item) => {
+  Object.assign(interviewResultForm, {
+    id: item.id,
+    name: item.name || "",
+    interview_round: item.interview_round || 1,
+    status: item.status || "",
+    result: interviewMeta.result_next_round,
+    score: item.score ?? null,
+    result_note: item.result_note || "",
+  });
+  showInterviewResultForm.value = true;
+};
+
+// 关闭结果弹窗并重置表单
+const closeInterviewResult = () => {
+  showInterviewResultForm.value = false;
+  resultSaving.value = false;
+  resetInterviewResultForm();
+};
+
+// 保存安排：做前端基础校验后提交后端状态机
+const saveInterviewSchedule = async () => {
+  if (!interviewScheduleForm.id) return;
+  if (!interviewScheduleForm.interview_at) {
+    toastRef.value?.show("请填写面试时间", "error");
+    return;
+  }
+  const interviewTime = new Date(interviewScheduleForm.interview_at);
+  if (Number.isNaN(interviewTime.getTime())) {
+    toastRef.value?.show("面试时间格式不正确", "error");
+    return;
+  }
+  if (interviewTime.getTime() <= Date.now()) {
+    toastRef.value?.show("面试时间不能早于当前时间", "error");
+    return;
+  }
+  scheduleSaving.value = true;
+  try {
+    await interviewApi.scheduleCandidate(interviewScheduleForm.id, {
+      interview_at: interviewScheduleForm.interview_at,
+      interviewer: interviewScheduleForm.interviewer,
+      interview_location: interviewScheduleForm.interview_location,
+      note: interviewScheduleForm.note,
+    });
+    notifySuccess("面试安排已保存");
+    closeInterviewSchedule();
+    await loadInterviewCandidates(true);
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    scheduleSaving.value = false;
+  }
+};
+
+// 取消当前已安排的面试（保留候选人在拟面试池）
+const cancelInterviewSchedule = async ({ id, name }) => {
+  const ok = await confirmRef.value.open({
+    title: "取消面试安排",
+    content: `确认取消「${name || "该候选人"}」当前面试安排吗？`,
+    confirmText: "取消安排",
+    type: "danger",
+  });
+  if (!ok) return false;
+  try {
+    await interviewApi.cancelSchedule(id);
+    notifySuccess("已取消面试安排");
+    await loadInterviewCandidates(true);
+    return true;
+  } catch (err) {
+    notifyError(err);
+    return false;
+  }
+};
+
+// 从安排弹窗内触发取消安排
+const cancelInterviewScheduleFromForm = async () => {
+  if (!interviewScheduleForm.id) return;
+  const done = await cancelInterviewSchedule({
+    id: interviewScheduleForm.id,
+    name: interviewScheduleForm.name,
+  });
+  if (done) closeInterviewSchedule();
+};
+
+// 保存结果：支持进入下一轮/通过/淘汰，并按需刷新通过列表与人才库
+const saveInterviewResult = async () => {
+  if (!interviewResultForm.id) return;
+  if (interviewResultForm.score !== null && interviewResultForm.score !== "") {
+    const score = Number(interviewResultForm.score);
+    if (!Number.isInteger(score) || score < 0 || score > 100) {
+      toastRef.value?.show("评分需为 0-100 的整数", "error");
+      return;
+    }
+  }
+  resultSaving.value = true;
+  try {
+    const payload = {
+      result: interviewResultForm.result,
+      result_note: interviewResultForm.result_note,
+      score:
+        interviewResultForm.score === null || interviewResultForm.score === ""
+          ? null
+          : Number(interviewResultForm.score),
+    };
+    await interviewApi.saveResult(interviewResultForm.id, payload);
+    const shouldRefreshPassed =
+      dataLoaded.passed || interviewResultForm.result === interviewMeta.result_pass;
+    const shouldRefreshTalent =
+      dataLoaded.talent || interviewResultForm.result === interviewMeta.result_reject;
+    notifySuccess("面试结果已保存");
+    closeInterviewResult();
+    await refreshInterviewModules({
+      forcePassed: shouldRefreshPassed,
+      forceTalent: shouldRefreshTalent,
+    });
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    resultSaving.value = false;
+  }
 };
 
 const isApplicationSelected = (applicationId) =>
@@ -1374,10 +1786,7 @@ const addSelectedToInterviewPool = async () => {
   });
   if (!ok) return;
   try {
-    const result = await request(`${adminBase}/interview-candidates/batch-add/`, {
-      method: "POST",
-      body: JSON.stringify({ application_ids: selectedApplicationIds.value }),
-    });
+    const result = await interviewApi.batchAddFromApplications(selectedApplicationIds.value);
     const parts = [];
     if (result.added) parts.push(`新增 ${result.added} 人`);
     if (result.existing) parts.push(`已存在 ${result.existing} 人`);
@@ -1396,6 +1805,27 @@ const refreshInterviewCandidates = async () => {
   notifySuccess("拟面试人员列表已刷新");
 };
 
+const refreshPassedCandidates = async () => {
+  await loadPassedCandidates(true);
+  notifySuccess("面试通过人员列表已刷新");
+};
+
+const refreshTalentPoolCandidates = async () => {
+  await loadTalentPoolCandidates(true);
+  notifySuccess("人才库列表已刷新");
+};
+
+// 统一刷新面试相关模块，避免多处重复刷新逻辑
+const refreshInterviewModules = async ({ forcePassed = false, forceTalent = false } = {}) => {
+  await loadInterviewCandidates(true);
+  if (forcePassed || dataLoaded.passed) {
+    await loadPassedCandidates(true);
+  }
+  if (forceTalent || dataLoaded.talent) {
+    await loadTalentPoolCandidates(true);
+  }
+};
+
 const batchRemoveInterviewCandidates = async () => {
   if (!selectedInterviewIds.value.length) return;
   const ok = await confirmRef.value.open({
@@ -1406,12 +1836,9 @@ const batchRemoveInterviewCandidates = async () => {
   });
   if (!ok) return;
   try {
-    const result = await request(`${adminBase}/interview-candidates/batch-remove/`, {
-      method: "POST",
-      body: JSON.stringify({ interview_candidate_ids: selectedInterviewIds.value }),
-    });
+    const result = await interviewApi.batchRemoveCandidates(selectedInterviewIds.value);
     selectedInterviewIds.value = [];
-    await loadInterviewCandidates(true);
+    await refreshInterviewModules();
     notifySuccess(`已移出 ${result.removed || 0} 人`);
   } catch (err) {
     notifyError(err);
@@ -1427,18 +1854,17 @@ const removeInterviewCandidate = async (item) => {
   });
   if (!ok) return;
   try {
-    await request(`${adminBase}/interview-candidates/${item.id}/`, {
-      method: "DELETE",
-    });
+    await interviewApi.removeCandidate(item.id);
     selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => id !== item.id);
     notifySuccess("已移出拟面试人员");
-    await loadInterviewCandidates(true);
+    await refreshInterviewModules();
   } catch (err) {
     notifyError(err);
   }
 };
 
 const openApplicationFromInterview = async (item) => {
+  // 从面试列表跳转到同一人的应聘详情弹窗
   await openApplication({
     id: item.application_id,
     name: item.name,
@@ -1465,6 +1891,68 @@ const openApplication = async (item) => {
 const closeApplication = () => {
   activeApplication.value = null;
   applicationDetailLoading.value = false;
+};
+
+const attachmentCardMeta = Object.freeze([
+  { key: "id_front", label: "身份证正面", hint: "核对身份信息" },
+  { key: "id_back", label: "身份证反面", hint: "核对有效期限" },
+  { key: "resume", label: "个人简历", hint: "查看完整履历" },
+]);
+
+const applicationAttachments = computed(() => {
+  const attachments = activeApplication.value?.attachments;
+  return Array.isArray(attachments) ? attachments : [];
+});
+
+const keyAttachmentCards = computed(() => {
+  const firstByCategory = new Map();
+  applicationAttachments.value.forEach((item) => {
+    if (!item?.category || firstByCategory.has(item.category)) return;
+    firstByCategory.set(item.category, item);
+  });
+  return attachmentCardMeta.map((meta) => {
+    const file = firstByCategory.get(meta.key);
+    const url = file?.file_url || "";
+    const fileName = file?.file_name || "";
+    const isImage = isImageFile(fileName || url);
+    return {
+      ...meta,
+      url,
+      fileName,
+      isImage,
+      previewTag: url ? attachmentPreviewTag(fileName || url, isImage) : "无",
+    };
+  });
+});
+
+const otherAttachmentFiles = computed(() => {
+  const keySet = new Set(attachmentCardMeta.map((item) => item.key));
+  return applicationAttachments.value.filter((item) => item?.category && !keySet.has(item.category));
+});
+
+const attachmentExtension = (value) => {
+  const normalized = String(value || "").split("?")[0].split("#")[0];
+  const parts = normalized.split(".");
+  if (parts.length < 2) return "";
+  return String(parts[parts.length - 1] || "").trim().toLowerCase();
+};
+
+const isImageFile = (value) => {
+  const ext = attachmentExtension(value);
+  return ["jpg", "jpeg", "png", "webp", "gif", "bmp", "svg"].includes(ext);
+};
+
+const attachmentPreviewTag = (value, isImage) => {
+  if (!value) return "无";
+  if (isImage) return "图";
+  const ext = attachmentExtension(value);
+  return ext ? ext.toUpperCase() : "文件";
+};
+
+const openAttachment = (rawUrl) => {
+  if (!rawUrl || typeof window === "undefined") return;
+  const url = resolveMediaUrl(rawUrl);
+  window.open(url, "_blank", "noopener,noreferrer");
 };
 
 const detailSections = computed(() => {

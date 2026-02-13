@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：SuccessModal 文件，实现对应模块能力。 -->
   <div v-if="visible" class="modal-backdrop">
     <div class="modal">
       <div class="modal-header">

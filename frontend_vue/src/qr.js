@@ -1,3 +1,4 @@
+// qr 文件，实现对应模块能力。
 import QRCode from "qrcode";
 import { FORM_URL } from "./config/runtime";
 
@@ -146,3 +147,4 @@ if (copyButton) {
     }
   });
 }
+

@@ -1,4 +1,5 @@
 <template>
+  <!-- 文件说明：ConfirmDialog 文件，实现对应模块能力。 -->
   <transition name="modal-fade">
     <div v-if="visible" class="modal-backdrop">
       <div class="modal-content">
@@ -64,7 +65,7 @@ defineExpose({ open });
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 3200;
 }
 .modal-content {
   background: white;

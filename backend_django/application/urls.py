@@ -1,3 +1,4 @@
+"""application 模块路由定义，将接口路径映射到视图。"""
 from django.urls import path
 
 from .views import (
@@ -5,8 +6,14 @@ from .views import (
     AdminApplicationListView,
     AdminInterviewCandidateBatchAddView,
     AdminInterviewCandidateBatchRemoveView,
+    AdminInterviewCandidateCancelScheduleView,
     AdminInterviewCandidateDetailView,
     AdminInterviewCandidateListView,
+    AdminInterviewMetaView,
+    AdminPassedCandidateListView,
+    AdminTalentPoolCandidateListView,
+    AdminInterviewCandidateResultView,
+    AdminInterviewCandidateScheduleView,
     AdminJobDetailView,
     AdminJobBatchStatusView,
     AdminJobListView,
@@ -71,9 +78,39 @@ urlpatterns = [
         name="admin-interview-candidates",
     ),
     path(
+        "admin/interview-meta/",
+        AdminInterviewMetaView.as_view(),
+        name="admin-interview-meta",
+    ),
+    path(
+        "admin/passed-candidates/",
+        AdminPassedCandidateListView.as_view(),
+        name="admin-passed-candidates",
+    ),
+    path(
+        "admin/talent-pool-candidates/",
+        AdminTalentPoolCandidateListView.as_view(),
+        name="admin-talent-pool-candidates",
+    ),
+    path(
         "admin/interview-candidates/<int:pk>/",
         AdminInterviewCandidateDetailView.as_view(),
         name="admin-interview-candidate-detail",
+    ),
+    path(
+        "admin/interview-candidates/<int:pk>/schedule/",
+        AdminInterviewCandidateScheduleView.as_view(),
+        name="admin-interview-candidate-schedule",
+    ),
+    path(
+        "admin/interview-candidates/<int:pk>/cancel-schedule/",
+        AdminInterviewCandidateCancelScheduleView.as_view(),
+        name="admin-interview-candidate-cancel-schedule",
+    ),
+    path(
+        "admin/interview-candidates/<int:pk>/result/",
+        AdminInterviewCandidateResultView.as_view(),
+        name="admin-interview-candidate-result",
     ),
     path(
         "admin/interview-candidates/batch-add/",

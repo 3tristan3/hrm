@@ -1,3 +1,4 @@
+"""后端路由总入口，挂载业务 API 与静态文件访问规则。"""
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
