@@ -4,7 +4,7 @@
     <FormHeader :submitting="submitting" :submitted="submitted" />
 
     <main class="form-shell">
-      <form class="form" @submit.prevent="submitForm">
+      <form ref="formRef" class="form" @submit.prevent="submitForm">
         <ApplyInfoSection
           :regions="regions"
           :jobs="jobs"
@@ -42,6 +42,8 @@
           :attachments="attachments"
           :errors="errors"
           :file-input-key="fileInputKey"
+          :max-file-mb="ATTACHMENT_MAX_FILE_MB"
+          :max-total-mb="ATTACHMENT_MAX_TOTAL_MB"
           @file-change="onFileChange"
         />
 
@@ -60,14 +62,13 @@
       :visible="modal.visible"
       :title="modal.title"
       :message="modal.message"
-      :application-id="applicationId"
       @close="closeModal"
     />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import FormHeader from "./components/FormHeader.vue";
 import ApplyInfoSection from "./components/ApplyInfoSection.vue";
 import BasicInfoSection from "./components/BasicInfoSection.vue";
@@ -81,7 +82,14 @@ import HobbySection from "./components/HobbySection.vue";
 import RegionExtraSection from "./components/RegionExtraSection.vue";
 import AttachmentSection from "./components/AttachmentSection.vue";
 import SuccessModal from "./components/SuccessModal.vue";
-import { PREWARM_JOBS, PREWARM_REGION_LIMIT, buildApiUrl } from "./config/runtime";
+import {
+  ATTACHMENT_MAX_FILE_MB,
+  ATTACHMENT_MAX_TOTAL_MB,
+  PREWARM_JOBS,
+  PREWARM_REGION_LIMIT,
+  buildApiUrl,
+} from "./config/runtime";
+import { validateAttachmentFiles } from "./utils/attachmentGuards";
 
 const regions = ref([]);
 const jobs = ref([]);
@@ -149,6 +157,8 @@ const submitting = ref(false);
 const submitted = ref(false);
 const errorMessage = ref("");
 const applicationId = ref("");
+const attachmentToken = ref("");
+const formRef = ref(null);
 
 const modal = reactive({
   visible: false,
@@ -176,6 +186,87 @@ const jobDetail = computed(() =>
 
 const clearErrors = () => {
   Object.keys(errors).forEach((key) => delete errors[key]);
+};
+
+const ERROR_FIELD_SELECTORS = Object.freeze({
+  recruit_type: '[name="recruit_type"]',
+  region_id: '[name="region_id"]',
+  job_id: '[name="job_id"]',
+  name: '[name="name"]',
+  age: '[name="age"]',
+  gender: '[name="gender"]',
+  height_cm: '[name="height_cm"]',
+  weight_kg: '[name="weight_kg"]',
+  marital_status: '[name="marital_status"]',
+  political_status: '[name="political_status"]',
+  ethnicity: '[name="ethnicity"]',
+  education_level: '[name="education_level"]',
+  education_period: '[name="education_start"]',
+  id_number: '[name="id_number"]',
+  phone: '[name="phone"]',
+  qq: '[name="qq"]',
+  wechat: '[name="wechat"]',
+  email: '[name="email"]',
+  photo: '[data-error-anchor="photo"]',
+  id_front: '[data-error-anchor="id_front"]',
+  id_back: '[data-error-anchor="id_back"]',
+  resume: '[data-error-anchor="resume"]',
+  education_history: '[data-error-anchor="education_history"]',
+  work_history: '[data-error-anchor="work_history"]',
+  family_members: '[data-error-anchor="family_members"]',
+});
+
+const ensureElementFocusable = (el) => {
+  if (!el || typeof el.focus !== "function") return;
+  const focusableTags = ["INPUT", "SELECT", "TEXTAREA", "BUTTON", "A"];
+  if (focusableTags.includes(el.tagName)) return;
+  if (!el.hasAttribute("tabindex")) {
+    el.setAttribute("tabindex", "-1");
+  }
+};
+
+const highlightAndFocusErrorTarget = (target) => {
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.classList?.add("error-focus");
+  window.setTimeout(() => target.classList?.remove("error-focus"), 1500);
+  ensureElementFocusable(target);
+  try {
+    target.focus({ preventScroll: true });
+  } catch {
+    target.focus?.();
+  }
+};
+
+const findErrorTarget = (key, rootEl) => {
+  if (!rootEl || !key) return null;
+  const explicitSelector = ERROR_FIELD_SELECTORS[key];
+  if (explicitSelector) {
+    const found = rootEl.querySelector(explicitSelector);
+    if (found) return found;
+  }
+  return (
+    rootEl.querySelector(`[name="${key}"]`) ||
+    rootEl.querySelector(`[name="extra_${key}"]`) ||
+    rootEl.querySelector(`[data-error-anchor="${key}"]`)
+  );
+};
+
+const scrollToFirstError = async () => {
+  await nextTick();
+  const rootEl = formRef.value;
+  if (!rootEl) return;
+  const keys = Object.keys(errors);
+  if (!keys.length) return;
+  for (const key of keys) {
+    const target = findErrorTarget(key, rootEl);
+    if (target) {
+      highlightAndFocusErrorTarget(target);
+      return;
+    }
+  }
+  const fallback = rootEl.querySelector(".form-alert.error");
+  if (fallback) highlightAndFocusErrorTarget(fallback);
 };
 
 const canUseSessionStorage = () => typeof window !== "undefined" && !!window.sessionStorage;
@@ -369,6 +460,26 @@ const buildExtraFieldsPayload = () => {
 
 const onFileChange = (type, event) => {
   const files = Array.from(event.target.files || []);
+  const incomingFiles = type === "other" ? files : files.slice(0, 1);
+  const validation = validateAttachmentFiles({
+    attachments,
+    type,
+    incomingFiles,
+    maxFileMb: ATTACHMENT_MAX_FILE_MB,
+    maxTotalMb: ATTACHMENT_MAX_TOTAL_MB,
+  });
+  if (!validation.ok) {
+    errors[type] = validation.error;
+    errorMessage.value = `上传失败：${validation.error}`;
+    if (event?.target) event.target.value = "";
+    return;
+  }
+
+  delete errors[type];
+  if (errorMessage.value.startsWith("上传失败：")) {
+    errorMessage.value = "";
+  }
+
   if (type === "other") {
     attachments.other = files;
     return;
@@ -427,14 +538,6 @@ const validate = () => {
     errors.education_history = "教育/培训经历每一条内容均为必填";
   }
 
-  const familyPayload = buildRowPayload(familyRows.value, [
-    "name",
-    "relation",
-    "age",
-    "company",
-    "position",
-    "phone",
-  ]);
   if (familyRows.value.length < 2) {
     errors.family_members = "请至少填写两位家庭成员";
   } else if (familyRows.value.some((row) => !isRowComplete(row, familyRequiredFields))) {
@@ -480,6 +583,7 @@ const resetForm = () => {
   errorMessage.value = "";
   submitted.value = false;
   applicationId.value = "";
+  attachmentToken.value = "";
 };
 
 const openModal = (title, message) => {
@@ -492,7 +596,7 @@ const closeModal = () => {
   modal.visible = false;
 };
 
-const uploadAttachment = async (appId, category, files) => {
+const uploadAttachment = async (appId, token, category, files) => {
   if (!files || (Array.isArray(files) && files.length === 0)) return;
   const formData = new FormData();
   formData.append("category", category);
@@ -503,12 +607,26 @@ const uploadAttachment = async (appId, category, files) => {
   }
   const response = await fetch(`${submitUrl}${appId}/attachments/`, {
     method: "POST",
+    headers: {
+      "X-Application-Token": token,
+    },
     body: formData,
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || "附件上传失败");
   }
+};
+
+const discardDraftApplication = async (appId, token) => {
+  if (!appId || !token) return false;
+  const response = await fetch(`${submitUrl}${appId}/discard/`, {
+    method: "POST",
+    headers: {
+      "X-Application-Token": token,
+    },
+  });
+  return response.ok;
 };
 
 const submitForm = async () => {
@@ -518,7 +636,11 @@ const submitForm = async () => {
     return;
   }
 
-  if (!validate()) return;
+  if (!validate()) {
+    errorMessage.value = "请先完成必填项，并修正标红错误字段。";
+    await scrollToFirstError();
+    return;
+  }
 
   const regionId = Number(selectedRegionId.value || 0);
   if (!regionId) return;
@@ -604,22 +726,38 @@ const submitForm = async () => {
         });
       }
       errorMessage.value = body.error || "提交失败，请检查填写内容";
+      await scrollToFirstError();
       return;
     }
 
     applicationId.value = body.applicationId || "";
-    submitted.value = true;
+    attachmentToken.value = body.attachmentToken || "";
+    if (!applicationId.value || !attachmentToken.value) {
+      throw new Error("提交失败：未获取到附件凭证，请稍后重试");
+    }
 
     try {
-      await uploadAttachment(applicationId.value, "photo", attachments.photo);
-      await uploadAttachment(applicationId.value, "id_front", attachments.id_front);
-      await uploadAttachment(applicationId.value, "id_back", attachments.id_back);
-      await uploadAttachment(applicationId.value, "resume", attachments.resume);
-      await uploadAttachment(applicationId.value, "other", attachments.other);
+      await uploadAttachment(applicationId.value, attachmentToken.value, "photo", attachments.photo);
+      await uploadAttachment(applicationId.value, attachmentToken.value, "id_front", attachments.id_front);
+      await uploadAttachment(applicationId.value, attachmentToken.value, "id_back", attachments.id_back);
+      await uploadAttachment(applicationId.value, attachmentToken.value, "resume", attachments.resume);
+      await uploadAttachment(applicationId.value, attachmentToken.value, "other", attachments.other);
+      submitted.value = true;
       openModal("提交成功", "您的信息已提交完成，我们会尽快联系您。");
     } catch (uploadErr) {
-      errorMessage.value = uploadErr?.message || "附件上传失败，请联系管理员补传";
-      openModal("提交完成", "信息已提交，但附件上传未完成，请联系管理员补传。");
+      const rollbackOk = await discardDraftApplication(applicationId.value, attachmentToken.value).catch(
+        () => false
+      );
+      submitted.value = false;
+      applicationId.value = "";
+      attachmentToken.value = "";
+      if (rollbackOk) {
+        errorMessage.value = uploadErr?.message || "附件上传失败，已自动回滚，请重新提交";
+        openModal("提交失败", "附件上传失败，本次提交已自动回滚，请检查后重试。");
+      } else {
+        errorMessage.value = uploadErr?.message || "附件上传失败，请联系管理员处理";
+        openModal("提交异常", "附件上传失败，且自动回滚未完成，请联系管理员处理。");
+      }
     }
   } catch (err) {
     errorMessage.value = err?.message || "无法连接后端服务，请确认接口地址";

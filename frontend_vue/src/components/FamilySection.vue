@@ -1,6 +1,6 @@
 <template>
   <!-- 文件说明：FamilySection 文件，实现对应模块能力。 -->
-  <section class="section-card">
+  <section class="section-card" data-error-anchor="family_members" tabindex="-1">
     <div class="section-header">
       <div>
         <p class="section-tag">08</p>

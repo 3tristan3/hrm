@@ -248,6 +248,14 @@ a {
   box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.18);
 }
 
+.error-focus {
+  outline: 2px solid #F97316;
+  outline-offset: 2px;
+  border-radius: 10px;
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18);
+  transition: outline-color 0.25s ease, box-shadow 0.25s ease;
+}
+
 .field small,
 .section-error {
   color: #ff4d4f;
@@ -474,12 +482,6 @@ a {
 .modal-body {
   padding: 16px 20px;
   color: var(--text-sub);
-}
-
-.modal-id {
-  margin-top: 8px;
-  color: var(--text-main);
-  font-weight: 600;
 }
 
 .modal-footer {

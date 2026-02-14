@@ -12,25 +12,25 @@
       <div class="grid-4">
         <label class="field">
           <span>手机 <em class="required">*</em></span>
-          <input v-model.trim="form.phone" type="tel" placeholder="11位手机号" />
+          <input v-model.trim="form.phone" name="phone" type="tel" placeholder="11位手机号" />
           <small v-if="errors.phone">{{ errors.phone }}</small>
         </label>
 
         <label class="field">
           <span>QQ 号码 <em class="required">*</em></span>
-          <input v-model.trim="form.qq" type="text" />
+          <input v-model.trim="form.qq" name="qq" type="text" />
           <small v-if="errors.qq">{{ errors.qq }}</small>
         </label>
 
         <label class="field">
           <span>微信号 <em class="required">*</em></span>
-          <input v-model.trim="form.wechat" type="text" placeholder="请输入微信号" />
+          <input v-model.trim="form.wechat" name="wechat" type="text" placeholder="请输入微信号" />
           <small v-if="errors.wechat">{{ errors.wechat }}</small>
         </label>
 
         <label class="field">
           <span>邮箱 <em class="required">*</em></span>
-          <input v-model.trim="form.email" type="email" placeholder="xxx@xx.com" />
+          <input v-model.trim="form.email" name="email" type="email" placeholder="xxx@xx.com" />
           <small v-if="errors.email">{{ errors.email }}</small>
         </label>
       </div>

@@ -2,20 +2,28 @@
 import json
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Prefetch, ProtectedError, Q
 from django.shortcuts import get_object_or_404
+from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.authentication import TokenAuthentication
 from rest_framework.pagination import CursorPagination, PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .authentication import ExpiringTokenAuthentication
+from .auth_security import (
+    clear_login_failures,
+    get_lock_remaining_seconds,
+    normalize_login_username,
+    register_login_failure,
+)
 from .interview_flow import (
     FINAL_RESULTS,
     InterviewFlowError,
@@ -25,6 +33,7 @@ from .interview_flow import (
     schedule_interview,
 )
 from .audit import request_id_from_request, write_operation_log
+from .throttles import LoginRateThrottle
 from .operation_log_meta import (
     OPERATION_ACTION_LABELS,
     OPERATION_LOG_DEFAULT_DAYS,
@@ -72,6 +81,27 @@ from .serializers import (
     RegionSerializer,
 )
 
+MB_IN_BYTES = 1024 * 1024
+ATTACHMENT_TOKEN_HEADER = "X-Application-Token"
+
+
+def _safe_file_size(file_obj) -> int:
+    try:
+        return int(getattr(file_obj, "size", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _resolve_attachment_limits():
+    max_file_mb = max(int(getattr(settings, "APPLICATION_ATTACHMENT_MAX_FILE_MB", 10) or 10), 1)
+    max_total_mb = max(int(getattr(settings, "APPLICATION_ATTACHMENT_MAX_TOTAL_MB", 40) or 40), 1)
+    return (
+        max_file_mb,
+        max_total_mb,
+        max_file_mb * MB_IN_BYTES,
+        max_total_mb * MB_IN_BYTES,
+    )
+
 
 class HealthCheckView(APIView):
     authentication_classes = []
@@ -99,7 +129,7 @@ class OperationLogCursorPagination(CursorPagination):
 
 
 class AdminScopedMixin:
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def _user_region_scope(self):
@@ -196,7 +226,11 @@ class ApplicationCreateView(APIView):
         application = Application.objects.create(**create_kwargs)
 
         return Response(
-            {"message": "提交成功", "applicationId": application.pk},
+            {
+                "message": "提交成功",
+                "applicationId": application.pk,
+                "attachmentToken": application.attachment_token,
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -217,16 +251,57 @@ class MockOAView(APIView):
         )
 
 
-class ApplicationAttachmentListCreateView(APIView):
-    def get(self, request: Request, pk: int):
+class ApplicationTokenAccessMixin:
+    authentication_classes = [ExpiringTokenAuthentication]
+    permission_classes = [AllowAny]
+
+    @staticmethod
+    def _not_found_response():
+        return Response({"error": "记录不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+    @staticmethod
+    def _is_admin_request(request: Request) -> bool:
+        user = getattr(request, "user", None)
+        return bool(user and user.is_authenticated)
+
+    @staticmethod
+    def _extract_token(request: Request):
+        header_value = (request.headers.get(ATTACHMENT_TOKEN_HEADER) or "").strip()
+        if header_value:
+            return header_value
+        query_value = (request.query_params.get("token") or "").strip()
+        if query_value:
+            return query_value
+        data_value = (request.data.get("attachment_token") or "").strip() if hasattr(request, "data") else ""
+        return data_value
+
+    def _has_valid_token(self, request: Request, application: Application) -> bool:
+        token = self._extract_token(request)
+        if not token:
+            return False
+        return constant_time_compare(str(application.attachment_token), token)
+
+    def _resolve_accessible_application(self, request: Request, pk: int):
         application = get_object_or_404(Application, pk=pk)
+        if self._is_admin_request(request) or self._has_valid_token(request, application):
+            return application
+        return None
+
+
+class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
+    def get(self, request: Request, pk: int):
+        application = self._resolve_accessible_application(request, pk)
+        if not application:
+            return self._not_found_response()
         serializer = ApplicationAttachmentSerializer(
             application.attachments.all(), many=True, context={"request": request}
         )
         return Response(serializer.data)
 
     def post(self, request: Request, pk: int):
-        application = get_object_or_404(Application, pk=pk)
+        application = self._resolve_accessible_application(request, pk)
+        if not application:
+            return self._not_found_response()
         serializer = ApplicationAttachmentUploadSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(
@@ -245,6 +320,33 @@ class ApplicationAttachmentListCreateView(APIView):
                 {"error": "该附件类型仅支持上传单个文件"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        max_file_mb, max_total_mb, max_file_bytes, max_total_bytes = _resolve_attachment_limits()
+        oversized_files = [upload.name for upload in files if _safe_file_size(upload) > max_file_bytes]
+        if oversized_files:
+            return Response(
+                {
+                    "error": f"单个文件不能超过{max_file_mb}MB",
+                    "details": {"file": [f"超出大小限制: {name}" for name in oversized_files]},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        incoming_total_bytes = sum(_safe_file_size(upload) for upload in files)
+        existing_attachments = list(application.attachments.all())
+        existing_total_bytes = sum(_safe_file_size(item.file) for item in existing_attachments)
+        replaced_bytes = 0
+        if category != "other":
+            replaced_bytes = sum(
+                _safe_file_size(item.file) for item in existing_attachments if item.category == category
+            )
+        projected_total_bytes = max(existing_total_bytes - replaced_bytes, 0) + incoming_total_bytes
+        if projected_total_bytes > max_total_bytes:
+            return Response(
+                {"error": f"附件总大小不能超过{max_total_mb}MB"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if category != "other":
             ApplicationAttachment.objects.filter(
                 application=application, category=category
@@ -259,6 +361,26 @@ class ApplicationAttachmentListCreateView(APIView):
             attachments, many=True, context={"request": request}
         )
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+class ApplicationDiscardView(ApplicationTokenAccessMixin, APIView):
+    def post(self, request: Request, pk: int):
+        application = self._resolve_accessible_application(request, pk)
+        if not application:
+            return self._not_found_response()
+        if hasattr(application, "interview_candidate"):
+            return Response(
+                {"error": "记录已进入面试流程，无法撤销"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            for item in application.attachments.all():
+                try:
+                    item.file.delete(save=False)
+                except Exception:
+                    pass
+            application.delete()
+        return Response({"message": "草稿已撤销"})
 
 
 class RegisterView(APIView):
@@ -282,15 +404,43 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+    throttle_classes = [LoginRateThrottle]
+
+    @staticmethod
+    def _locked_response(remaining_seconds: int) -> Response:
+        retry_after_seconds = max(int(remaining_seconds), 1)
+        retry_after_minutes = max((retry_after_seconds + 59) // 60, 1)
+        return Response(
+            {
+                "error": "登录失败",
+                "error_code": "LOGIN_LOCKED",
+                "retry_after_seconds": retry_after_seconds,
+                "details": {
+                    "non_field_errors": [f"登录失败次数过多，请{retry_after_minutes}分钟后再试"]
+                },
+            },
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
     def post(self, request: Request):
+        username = normalize_login_username(request.data.get("username", ""))
+        lock_remaining = get_lock_remaining_seconds(username)
+        if lock_remaining > 0:
+            return self._locked_response(lock_remaining)
+
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
+            is_locked, remaining = register_login_failure(username)
+            if is_locked:
+                return self._locked_response(remaining)
             return Response(
                 {"error": "登录失败", "details": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user = serializer.validated_data["user"]
-        token, _ = Token.objects.get_or_create(user=user)
+        clear_login_failures(username)
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
         profile = getattr(user, "profile", None)
         return Response(
             {
@@ -303,7 +453,7 @@ class LoginView(APIView):
 
 
 class MeView(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request):
@@ -343,6 +493,7 @@ class AdminUserPasswordView(AdminScopedMixin, APIView):
             )
         user.set_password(serializer.validated_data["password"])
         user.save(update_fields=["password"])
+        Token.objects.filter(user=user).delete()
         self._write_operation_log(
             request,
             user=request.user,
@@ -387,7 +538,7 @@ class AdminUserDetailView(AdminScopedMixin, APIView):
 
 
 class ChangePasswordView(APIView):
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request):
@@ -402,7 +553,21 @@ class ChangePasswordView(APIView):
             return Response({"error": "原密码不正确"}, status=status.HTTP_400_BAD_REQUEST)
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
-        return Response({"message": "密码已更新"})
+        Token.objects.filter(user=user).delete()
+        return Response({"message": "密码已更新，请重新登录", "force_relogin": True})
+
+
+class LogoutView(APIView):
+    authentication_classes = [ExpiringTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request):
+        token = getattr(request, "auth", None)
+        if token:
+            token.delete()
+        else:
+            Token.objects.filter(user=request.user).delete()
+        return Response({"message": "已退出登录"})
 
 
 class _RegionAdminQuerysetMixin(AdminScopedMixin):
@@ -596,9 +761,12 @@ class AdminApplicationListView(_ApplicationAdminQuerysetMixin, generics.ListAPIV
     serializer_class = ApplicationAdminListSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(job__is_active=True).exclude(
-            interview_candidate__status=InterviewCandidate.STATUS_COMPLETED,
-            interview_candidate__result=InterviewCandidate.RESULT_REJECT,
+        # 应聘记录列表仅展示尚未进入拟面试池的记录。
+        # 一旦加入拟面试池（存在 interview_candidate），就从该列表移除；
+        # 若后续从拟面试池移除（删除 interview_candidate），会自动重新出现。
+        queryset = super().get_queryset().filter(
+            job__is_active=True,
+            interview_candidate__isnull=True,
         )
         job_id = self.request.query_params.get("job_id")
         region_id = self.request.query_params.get("region_id")
@@ -1207,7 +1375,7 @@ class AdminTalentPoolCandidateBatchAddView(AdminScopedMixin, APIView):
         moved = 0
         existing = 0
         blocked_ids = []
-        default_note = "从应聘记录直接加入人才库"
+        default_note = "简历初筛未通过"
         moved_ids = set()
         existing_ids = set()
 
@@ -1287,7 +1455,7 @@ class AdminTalentPoolCandidateBatchAddView(AdminScopedMixin, APIView):
                 summary = f"{application.name}加入人才库（已在人才库）"
             elif application_id in moved_ids:
                 result_value = OperationLog.RESULT_SUCCESS
-                summary = f"{application.name}加入人才库"
+                summary = f"{application.name}加入人才库（简历初筛未通过）"
             else:
                 result_value = OperationLog.RESULT_FAILED
                 summary = f"{application.name}加入人才库失败"
@@ -1319,7 +1487,7 @@ class AdminTalentPoolCandidateBatchAddView(AdminScopedMixin, APIView):
             action="BATCH_ADD_TO_TALENT_POOL",
             target_type="application_batch",
             target_label=f"{len(application_ids)}条应聘记录",
-            summary=f"批量加入人才库：加入 {moved}，已在库 {existing}，拦截 {len(blocked_ids)}",
+            summary=f"批量加入人才库（简历初筛未通过）：加入 {moved}，已在库 {existing}，拦截 {len(blocked_ids)}",
             details={
                 "application_ids": application_ids,
                 "moved": moved,

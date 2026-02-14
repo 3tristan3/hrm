@@ -16,7 +16,7 @@
             <em v-if="field.required" class="required">*</em>
           </span>
           <template v-if="field.field_type === 'select'">
-            <select v-model="extraFields[field.key]">
+            <select v-model="extraFields[field.key]" :name="`extra_${field.key}`">
               <option value="">请选择</option>
               <option v-for="option in field.options || []" :key="option" :value="option">
                 {{ option }}
@@ -27,6 +27,7 @@
             <input
               :type="inputType(field.field_type)"
               v-model="extraFields[field.key]"
+              :name="`extra_${field.key}`"
               :placeholder="`请输入${field.label}`"
             />
           </template>

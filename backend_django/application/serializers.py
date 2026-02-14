@@ -1,6 +1,8 @@
 """DRF 序列化器定义，负责接口参数校验与响应结构组装。"""
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
@@ -772,8 +774,23 @@ User = get_user_model()
 
 class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, min_length=8, max_length=128)
     region_id = serializers.IntegerField()
+
+    def validate_username(self, value):
+        normalized = (value or "").strip()
+        if not normalized:
+            raise serializers.ValidationError("账号不能为空")
+        if User.objects.filter(username__iexact=normalized).exists():
+            raise serializers.ValidationError("账号已存在")
+        return normalized
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
 
     def validate_region_id(self, value):
         if not Region.objects.filter(id=value, is_active=True).exists():
@@ -784,9 +801,6 @@ class RegisterSerializer(serializers.Serializer):
         username = validated_data["username"]
         password = validated_data["password"]
         region = Region.objects.get(id=validated_data["region_id"])
-
-        if User.objects.filter(username=username).exists():
-            raise serializers.ValidationError({"username": "账号已存在"})
 
         user = User.objects.create_user(username=username, password=password)
         can_view_all = False
@@ -800,9 +814,17 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        user = authenticate(username=attrs["username"], password=attrs["password"])
+        username = (attrs.get("username") or "").strip()
+        password = attrs.get("password") or ""
+        if not username or not password:
+            raise serializers.ValidationError("账号或密码错误")
+        matched_user = User.objects.filter(username__iexact=username).first()
+        auth_username = matched_user.username if matched_user else username
+        user = authenticate(username=auth_username, password=password)
         if not user:
             raise serializers.ValidationError("账号或密码错误")
+        if not user.is_active:
+            raise serializers.ValidationError("账号已禁用")
         attrs["user"] = user
         return attrs
 
@@ -841,9 +863,23 @@ class AdminUserSerializer(serializers.Serializer):
 
 
 class AdminPasswordResetSerializer(serializers.Serializer):
-    password = serializers.CharField(min_length=6, max_length=128)
+    password = serializers.CharField(min_length=8, max_length=128)
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
 
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField()
-    new_password = serializers.CharField(min_length=6, max_length=128)
+    new_password = serializers.CharField(min_length=8, max_length=128)
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value

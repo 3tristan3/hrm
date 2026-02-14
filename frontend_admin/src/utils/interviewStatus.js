@@ -9,6 +9,15 @@ const toCnRound = (roundValue) => {
 
 const roundFaceLabel = (item) => `${toCnRound(item?.interview_round)}面`;
 
+const isDirectTalentReject = (item, interviewMeta = {}) => {
+  if (!item) return false;
+  const rejectValue = interviewMeta.result_reject || "淘汰";
+  if (item.result !== rejectValue) return false;
+  const hasRoundSnapshot = Boolean(item.first_round_at || item.second_round_at || item.third_round_at);
+  const hasInterviewTrace = Boolean(item.interview_at || item.interviewer || item.interview_location);
+  return !hasRoundSnapshot && !hasInterviewTrace;
+};
+
 export const getInterviewStatusClass = (item, interviewMeta = {}) => {
   if (item?.status === interviewMeta.status_scheduled) return "chip-scheduled";
   if (item?.result === interviewMeta.result_next_round || item?.result === interviewMeta.result_pass) {
@@ -31,8 +40,8 @@ export const getInterviewStatusText = (item, interviewMeta = {}) => {
   if (item?.result === interviewMeta.result_next_round || item?.result === interviewMeta.result_pass) {
     return `${roundLabel}${resultPass}`;
   }
+  if (isDirectTalentReject(item, interviewMeta)) return "简历初筛未通过";
   if (item?.result === interviewMeta.result_reject) return `${roundLabel}${resultReject}`;
   if (item?.status === statusPending) return `待安排${roundLabel}`;
   return item?.status || statusPending;
 };
-

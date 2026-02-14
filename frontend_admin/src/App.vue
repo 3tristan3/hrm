@@ -1810,6 +1810,15 @@ const logout = async (silent = false) => {
     }));
   if (!isConfirmed) return;
 
+  if (token.value) {
+    try {
+      await request(`${authBase}/logout/`, { method: "POST" });
+    } catch (err) {
+      // 本地退出优先，登出接口失败不阻断清理（如 token 已过期）。
+      console.warn("logout api failed", err);
+    }
+  }
+
   token.value = "";
   localStorage.removeItem("admin_token");
   localStorage.removeItem("admin_username");
@@ -2092,11 +2101,16 @@ const changeMyPassword = async () => {
     return;
   }
   try {
-    await request(`${authBase}/password/`, {
+    const result = await request(`${authBase}/password/`, {
       method: "POST",
       body: JSON.stringify({ old_password, new_password })
     });
-    notifySuccess("密码已更新");
+    if (result?.force_relogin) {
+      notifySuccess(result?.message || "密码已更新，请重新登录");
+      await logout(true);
+      return;
+    }
+    notifySuccess(result?.message || "密码已更新");
     selfPasswordForm.old_password = "";
     selfPasswordForm.new_password = "";
     selfPasswordForm.confirm_password = "";
@@ -2440,7 +2454,7 @@ const addSelectedToTalentPool = async () => {
   await runWithConfirm({
     confirm: {
       title: "加入人才库",
-      content: `确认将已选 ${selectedApplicationIds.value.length} 人加入人才库吗？加入后将从应聘记录中移除。`,
+      content: `确认将已选 ${selectedApplicationIds.value.length} 人加入人才库吗？加入后将标记为“简历初筛未通过”，并从应聘记录中移除。`,
       confirmText: "确认加入",
       type: "danger",
     },

@@ -7,7 +7,6 @@
       </div>
       <div class="modal-body">
         <p>{{ message }}</p>
-        <p v-if="applicationId" class="modal-id">申请ID：{{ applicationId }}</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" type="button" @click="$emit('close')">知道了</button>
@@ -21,7 +20,6 @@ defineProps({
   visible: Boolean,
   title: { type: String, default: "" },
   message: { type: String, default: "" },
-  applicationId: { type: String, default: "" },
 });
 defineEmits(["close"]);
 </script>

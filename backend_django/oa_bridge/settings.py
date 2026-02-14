@@ -91,7 +91,30 @@ else:
         }
     }
 
-AUTH_PASSWORD_VALIDATORS = []
+AUTH_PASSWORD_MIN_LENGTH = get_int("AUTH_PASSWORD_MIN_LENGTH", 8)
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": AUTH_PASSWORD_MIN_LENGTH},
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+]
+
+AUTH_TOKEN_TTL_HOURS = get_int("AUTH_TOKEN_TTL_HOURS", 24)
+AUTH_LOGIN_RATE = os.getenv("AUTH_LOGIN_RATE", "10/min")
+AUTH_LOGIN_MAX_FAILURES = get_int("AUTH_LOGIN_MAX_FAILURES", 5)
+AUTH_LOGIN_LOCK_MINUTES = get_int("AUTH_LOGIN_LOCK_MINUTES", 15)
+AUTH_LOGIN_FAILURE_WINDOW_MINUTES = get_int("AUTH_LOGIN_FAILURE_WINDOW_MINUTES", 15)
+APPLICATION_ATTACHMENT_MAX_FILE_MB = get_int("APPLICATION_ATTACHMENT_MAX_FILE_MB", 10)
+APPLICATION_ATTACHMENT_MAX_TOTAL_MB = get_int("APPLICATION_ATTACHMENT_MAX_TOTAL_MB", 40)
 
 LANGUAGE_CODE = "zh-hans"
 TIME_ZONE = "Asia/Shanghai"

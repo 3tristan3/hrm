@@ -1,5 +1,11 @@
 """业务数据模型定义，包含应聘记录、拟面试人员与轮次快照等核心实体。"""
+import secrets
+
 from django.db import models
+
+
+def generate_attachment_token() -> str:
+    return secrets.token_urlsafe(24)
 
 
 class Region(models.Model):
@@ -118,6 +124,13 @@ class Application(models.Model):
     work_history = models.JSONField("工作经历", default=list, blank=True)
     family_members = models.JSONField("家庭成员", default=list, blank=True)
     extra_fields = models.JSONField("扩展字段", default=dict, blank=True)
+    attachment_token = models.CharField(
+        "附件令牌",
+        max_length=48,
+        db_index=True,
+        default=generate_attachment_token,
+        editable=False,
+    )
     created_at = models.DateTimeField("提交时间", auto_now_add=True)
 
     class Meta:

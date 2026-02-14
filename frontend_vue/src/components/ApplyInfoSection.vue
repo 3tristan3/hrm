@@ -13,7 +13,7 @@
       <div class="grid-3">
         <label class="field">
           <span>招聘类型 <em class="required">*</em></span>
-          <select v-model="form.recruit_type">
+          <select v-model="form.recruit_type" name="recruit_type">
             <option value="">请选择</option>
             <option value="社招">社招</option>
             <option value="校招">校招</option>
@@ -23,7 +23,7 @@
 
         <label class="field">
           <span>应聘区域 <em class="required">*</em></span>
-          <select :value="selectedRegionId" @change="onRegionChange">
+          <select :value="selectedRegionId" name="region_id" @change="onRegionChange">
             <option value="">请选择</option>
             <option v-for="region in regions" :key="region.id" :value="region.id">
               {{ region.name }}
@@ -34,7 +34,7 @@
 
         <label class="field">
           <span>应聘职位 <em class="required">*</em></span>
-          <select :value="selectedJobId" :disabled="!jobs.length" @change="onJobChange">
+          <select :value="selectedJobId" name="job_id" :disabled="!jobs.length" @change="onJobChange">
             <option value="">请选择岗位</option>
             <option v-for="job in jobs" :key="job.id" :value="job.id">
               {{ job.title }}

@@ -46,4 +46,12 @@ export const PREWARM_REGION_LIMIT = parsePositiveInt(
   import.meta.env.VITE_PREWARM_REGION_LIMIT,
   3
 );
+export const ATTACHMENT_MAX_FILE_MB = parsePositiveInt(
+  import.meta.env.VITE_ATTACHMENT_MAX_FILE_MB,
+  10
+);
+export const ATTACHMENT_MAX_TOTAL_MB = parsePositiveInt(
+  import.meta.env.VITE_ATTACHMENT_MAX_TOTAL_MB,
+  40
+);
 

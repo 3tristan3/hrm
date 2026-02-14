@@ -12,16 +12,17 @@
       <div class="grid-3">
         <label class="field">
           <span>姓名 <em class="required">*</em></span>
-          <input v-model.trim="form.name" type="text" placeholder="真实姓名" />
+          <input v-model.trim="form.name" name="name" type="text" placeholder="真实姓名" />
           <small v-if="errors.name">{{ errors.name }}</small>
         </label>
 
-        <div class="upload-item" :key="fileInputKey">
+        <div class="upload-item" :key="fileInputKey" data-error-anchor="photo" tabindex="-1">
           <div class="upload-label">个人照片 <em class="required">*</em></div>
           <label class="upload-control">
             <input
               :key="fileInputKey"
               class="upload-input"
+              name="photo"
               type="file"
               accept="image/*"
               @change="$emit('file-change', 'photo', $event)"
@@ -34,13 +35,13 @@
 
         <label class="field">
           <span>年龄 <em class="required">*</em></span>
-          <input v-model.number="form.age" type="number" min="1" placeholder="周岁" />
+          <input v-model.number="form.age" name="age" type="number" min="1" placeholder="周岁" />
           <small v-if="errors.age">{{ errors.age }}</small>
         </label>
 
         <label class="field">
           <span>性别 <em class="required">*</em></span>
-          <select v-model="form.gender">
+          <select v-model="form.gender" name="gender">
             <option value="">请选择</option>
             <option value="男">男</option>
             <option value="女">女</option>
@@ -50,19 +51,19 @@
 
         <label class="field">
           <span>身高 (cm) <em class="required">*</em></span>
-          <input v-model.number="form.height_cm" type="number" min="1" />
+          <input v-model.number="form.height_cm" name="height_cm" type="number" min="1" />
           <small v-if="errors.height_cm">{{ errors.height_cm }}</small>
         </label>
 
         <label class="field">
           <span>体重 (kg) <em class="required">*</em></span>
-          <input v-model.number="form.weight_kg" type="number" min="1" />
+          <input v-model.number="form.weight_kg" name="weight_kg" type="number" min="1" />
           <small v-if="errors.weight_kg">{{ errors.weight_kg }}</small>
         </label>
 
         <label class="field">
           <span>婚姻情况 <em class="required">*</em></span>
-          <select v-model="form.marital_status">
+          <select v-model="form.marital_status" name="marital_status">
             <option value="">请选择</option>
             <option value="未婚">未婚</option>
             <option value="已婚">已婚</option>
@@ -79,7 +80,7 @@
 
         <label class="field">
           <span>政治面貌 <em class="required">*</em></span>
-          <select v-model="form.political_status">
+          <select v-model="form.political_status" name="political_status">
             <option value="">请选择</option>
             <option value="群众">群众</option>
             <option value="共青团员">共青团员</option>
@@ -92,13 +93,13 @@
 
         <label class="field">
           <span>民族 <em class="required">*</em></span>
-          <input v-model.trim="form.ethnicity" type="text" placeholder="如 汉族" />
+          <input v-model.trim="form.ethnicity" name="ethnicity" type="text" placeholder="如 汉族" />
           <small v-if="errors.ethnicity">{{ errors.ethnicity }}</small>
         </label>
 
         <label class="field">
           <span>全日职统招最高学历 <em class="required">*</em></span>
-          <select v-model="form.education_level">
+          <select v-model="form.education_level" name="education_level">
             <option value="">请选择</option>
             <option value="初中">初中</option>
             <option value="高中">高中</option>
@@ -115,19 +116,19 @@
 
         <label class="field">
           <span>最高学历入学时间 <em class="required">*</em></span>
-          <input v-model="form.education_start" type="month" />
+          <input v-model="form.education_start" name="education_start" type="month" />
           <small v-if="errors.education_period">{{ errors.education_period }}</small>
         </label>
 
         <label class="field">
           <span>最高学历毕业时间 <em class="required">*</em></span>
-          <input v-model="form.education_end" type="month" />
+          <input v-model="form.education_end" name="education_end" type="month" />
           <small v-if="errors.education_period">{{ errors.education_period }}</small>
         </label>
 
         <label class="field">
           <span>身份证号 <em class="required">*</em></span>
-          <input v-model.trim="form.id_number" type="text" placeholder="18位身份证号码" />
+          <input v-model.trim="form.id_number" name="id_number" type="text" placeholder="18位身份证号码" />
           <small v-if="errors.id_number">{{ errors.id_number }}</small>
         </label>
       </div>
