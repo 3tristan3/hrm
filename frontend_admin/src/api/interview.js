@@ -46,6 +46,18 @@ export const createInterviewApi = ({ adminBase, request }) => ({
       body: JSON.stringify({ application_ids: applicationIds }),
     });
   },
+  async batchAddToTalentPool(applicationIds) {
+    return request(`${adminBase}/talent-pool-candidates/batch-add/`, {
+      method: "POST",
+      body: JSON.stringify({ application_ids: applicationIds }),
+    });
+  },
+  async batchMoveTalentToInterview(candidateIds) {
+    return request(`${adminBase}/talent-pool-candidates/batch-to-interview/`, {
+      method: "POST",
+      body: JSON.stringify({ interview_candidate_ids: candidateIds }),
+    });
+  },
   async batchRemoveCandidates(candidateIds) {
     return request(`${adminBase}/interview-candidates/batch-remove/`, {
       method: "POST",

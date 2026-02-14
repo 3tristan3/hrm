@@ -1,13 +1,15 @@
 """后端 API 视图实现，承载后台管理与应聘流程业务接口。"""
 import json
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Prefetch, ProtectedError
+from django.db.models import Prefetch, ProtectedError, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.authentication import TokenAuthentication
-from rest_framework.pagination import PageNumberPagination
+from rest_framework.pagination import CursorPagination, PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.request import Request
@@ -22,12 +24,21 @@ from .interview_flow import (
     record_result,
     schedule_interview,
 )
+from .audit import request_id_from_request, write_operation_log
+from .operation_log_meta import (
+    OPERATION_ACTION_LABELS,
+    OPERATION_LOG_DEFAULT_DAYS,
+    OPERATION_LOG_PAGE_SIZE_OPTIONS,
+    OPERATION_MODULE_LABELS,
+    OPERATION_RESULT_LABELS,
+)
 from .models import (
     Application,
     ApplicationAttachment,
     InterviewCandidate,
     InterviewRoundRecord,
     Job,
+    OperationLog,
     Region,
     RegionField,
 )
@@ -52,6 +63,9 @@ from .serializers import (
     JobSerializer,
     LoginSerializer,
     MeSerializer,
+    OperationLogDetailSerializer,
+    OperationLogListSerializer,
+    OperationLogQuerySerializer,
     RegisterSerializer,
     RegionAdminSerializer,
     RegionFieldAdminSerializer,
@@ -73,6 +87,15 @@ class AdminResultListPagination(PageNumberPagination):
     page_size = 30
     page_size_query_param = "page_size"
     max_page_size = 100
+
+
+class OperationLogCursorPagination(CursorPagination):
+    """操作日志游标分页，避免深分页 offset 扫描。"""
+
+    page_size = 30
+    page_size_query_param = "page_size"
+    max_page_size = 100
+    ordering = ("-created_at", "-id")
 
 
 class AdminScopedMixin:
@@ -110,6 +133,13 @@ class AdminScopedMixin:
                 status=status.HTTP_403_FORBIDDEN,
             )
         return None
+
+    def _write_operation_log(self, request: Request, **kwargs):
+        """统一封装审计写入，避免在各视图重复传 request_id。"""
+        write_operation_log(
+            request_id=request_id_from_request(request),
+            **kwargs,
+        )
 
 
 class RegionListView(APIView):
@@ -313,6 +343,18 @@ class AdminUserPasswordView(AdminScopedMixin, APIView):
             )
         user.set_password(serializer.validated_data["password"])
         user.save(update_fields=["password"])
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="accounts",
+            action="RESET_USER_PASSWORD",
+            target_type="user",
+            target_id=user.id,
+            target_label=user.username,
+            summary=f"重置账号密码：{user.username}",
+            details={"user_id": user.id, "username": user.username},
+            region=getattr(getattr(user, "profile", None), "region", None),
+        )
         return Response({"message": "密码已更新"})
 
 
@@ -325,7 +367,22 @@ class AdminUserDetailView(AdminScopedMixin, APIView):
             return Response({"error": "不能删除系统管理员账号"}, status=status.HTTP_400_BAD_REQUEST)
         if user.pk == request.user.pk:
             return Response({"error": "不能删除当前登录账号"}, status=status.HTTP_400_BAD_REQUEST)
+        target_id = user.id
+        target_username = user.username
+        target_region = getattr(getattr(user, "profile", None), "region", None)
         user.delete()
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="accounts",
+            action="DELETE_USER",
+            target_type="user",
+            target_id=target_id,
+            target_label=target_username,
+            summary=f"删除账号：{target_username}",
+            details={"user_id": target_id, "username": target_username},
+            region=target_region,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -445,13 +502,30 @@ class AdminJobDetailView(AdminScopedMixin, generics.RetrieveUpdateDestroyAPIView
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request: Request, *args, **kwargs):
+        job = self.get_object()
+        target_job_id = job.id
+        target_job_title = job.title
+        target_region = getattr(job, "region", None)
         try:
-            return super().destroy(request, *args, **kwargs)
+            response = super().destroy(request, *args, **kwargs)
         except ProtectedError:
             return Response(
                 {"error": "该岗位已有应聘记录，无法删除"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="jobs",
+            action="DELETE_JOB",
+            target_type="job",
+            target_id=target_job_id,
+            target_label=target_job_title,
+            summary=f"删除岗位：{target_job_title}",
+            details={"job_id": target_job_id, "title": target_job_title},
+            region=target_region,
+        )
+        return response
 
 
 class AdminJobBatchStatusView(AdminScopedMixin, APIView):
@@ -479,6 +553,22 @@ class AdminJobBatchStatusView(AdminScopedMixin, APIView):
             )
 
         updated = queryset.update(is_active=is_active)
+        action = "BATCH_DEACTIVATE_JOB" if not is_active else "BATCH_ACTIVATE_JOB"
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="jobs",
+            action=action,
+            target_type="job_batch",
+            target_label=f"{len(job_ids)}个岗位",
+            summary=f"{'下架' if not is_active else '上架'}岗位 {updated} 个",
+            details={
+                "job_ids": job_ids,
+                "updated": updated,
+                "total": len(job_ids),
+                "is_active": is_active,
+            },
+        )
         return Response(
             {
                 "updated": updated,
@@ -506,7 +596,10 @@ class AdminApplicationListView(_ApplicationAdminQuerysetMixin, generics.ListAPIV
     serializer_class = ApplicationAdminListSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(job__is_active=True)
+        queryset = super().get_queryset().filter(job__is_active=True).exclude(
+            interview_candidate__status=InterviewCandidate.STATUS_COMPLETED,
+            interview_candidate__result=InterviewCandidate.RESULT_REJECT,
+        )
         job_id = self.request.query_params.get("job_id")
         region_id = self.request.query_params.get("region_id")
         job = self.request.query_params.get("job")
@@ -630,6 +723,105 @@ class _InterviewOutcomeCandidateListView(_InterviewCandidateAdminQuerysetMixin, 
         return super().list(request, *args, **kwargs)
 
 
+class AdminOperationLogListView(AdminScopedMixin, generics.ListAPIView):
+    """管理端操作日志查询接口。"""
+
+    serializer_class = OperationLogListSerializer
+    pagination_class = OperationLogCursorPagination
+
+    def get_queryset(self):
+        queryset = OperationLog.objects.select_related(
+            "operator",
+            "application",
+            "application__region",
+            "interview_candidate",
+            "interview_candidate__application",
+            "interview_candidate__application__region",
+            "region",
+        )
+        region_id = self._user_region_scope()
+        if region_id:
+            # 以业务对象所属地区做隔离；region 字段作为无关联业务对象时的兜底。
+            queryset = queryset.filter(
+                Q(application__region_id=region_id)
+                | Q(interview_candidate__application__region_id=region_id)
+                | Q(region_id=region_id)
+            )
+
+        query_serializer = OperationLogQuerySerializer(data=self.request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        params = query_serializer.validated_data
+
+        if params.get("application_id"):
+            queryset = queryset.filter(application_id=params["application_id"])
+        if params.get("operator_id"):
+            queryset = queryset.filter(operator_id=params["operator_id"])
+        if params.get("operator"):
+            queryset = queryset.filter(operator_username__icontains=params["operator"])
+        if params.get("module"):
+            queryset = queryset.filter(module=params["module"])
+        if params.get("action"):
+            queryset = queryset.filter(action=params["action"])
+        if params.get("result"):
+            queryset = queryset.filter(result=params["result"])
+        if params.get("date_from"):
+            queryset = queryset.filter(created_at__date__gte=params["date_from"])
+        if params.get("date_to"):
+            queryset = queryset.filter(created_at__date__lte=params["date_to"])
+        if not params.get("application_id") and not params.get("date_from") and not params.get("date_to"):
+            recent_date = timezone.localdate() - timedelta(days=OPERATION_LOG_DEFAULT_DAYS)
+            queryset = queryset.filter(created_at__date__gte=recent_date)
+        if params.get("keyword"):
+            keyword = params["keyword"]
+            queryset = queryset.filter(
+                Q(operator_username__icontains=keyword)
+                | Q(target_label__icontains=keyword)
+                | Q(summary__icontains=keyword)
+            )
+        return queryset.order_by("-created_at", "-id")
+
+
+class AdminOperationLogDetailView(AdminScopedMixin, generics.RetrieveAPIView):
+    """操作日志详情接口（按需返回 details）。"""
+
+    serializer_class = OperationLogDetailSerializer
+
+    def get_queryset(self):
+        queryset = OperationLog.objects.select_related(
+            "operator",
+            "application",
+            "application__region",
+            "interview_candidate",
+            "interview_candidate__application",
+            "interview_candidate__application__region",
+            "region",
+        )
+        region_id = self._user_region_scope()
+        if region_id:
+            queryset = queryset.filter(
+                Q(application__region_id=region_id)
+                | Q(interview_candidate__application__region_id=region_id)
+                | Q(region_id=region_id)
+            )
+        return queryset
+
+
+class AdminOperationLogMetaView(AdminScopedMixin, APIView):
+    """管理端操作日志元信息：标签映射与分页配置。"""
+
+    def get(self, request: Request):
+        return Response(
+            {
+                "module_labels": OPERATION_MODULE_LABELS,
+                "action_labels": OPERATION_ACTION_LABELS,
+                "result_labels": OPERATION_RESULT_LABELS,
+                "page_size_options": OPERATION_LOG_PAGE_SIZE_OPTIONS,
+                "default_recent_days": OPERATION_LOG_DEFAULT_DAYS,
+                "pagination_mode": "cursor",
+            }
+        )
+
+
 class AdminPassedCandidateListView(_InterviewOutcomeCandidateListView):
     """面试通过人员列表，含各轮次快照信息。"""
 
@@ -647,6 +839,26 @@ class AdminInterviewCandidateDetailView(
 ):
     serializer_class = InterviewCandidateListSerializer
 
+    def destroy(self, request: Request, *args, **kwargs):
+        candidate = self.get_object()
+        application = candidate.application
+        candidate_id = candidate.id
+        response = super().destroy(request, *args, **kwargs)
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="REMOVE_FROM_INTERVIEW_POOL",
+            target_type="interview_candidate",
+            target_id=candidate_id,
+            target_label=application.name,
+            summary=f"移出拟面试人员：{application.name}",
+            details={"interview_candidate_id": candidate_id, "application_id": application.id},
+            application=application,
+            region=application.region,
+        )
+        return response
+
 
 class AdminInterviewCandidateScheduleView(_InterviewCandidateAdminQuerysetMixin, APIView):
     """安排/改期面试接口。"""
@@ -660,9 +872,14 @@ class AdminInterviewCandidateScheduleView(_InterviewCandidateAdminQuerysetMixin,
             )
 
         data = serializer.validated_data
+        was_scheduled = False
+        before_round = 1
+        candidate = None
         try:
             with transaction.atomic():
                 candidate = self.get_locked_candidate(pk)
+                before_round = max(int(candidate.interview_round or 1), 1)
+                was_scheduled = bool(candidate.interview_at) or candidate.status == InterviewCandidate.STATUS_SCHEDULED
                 schedule_interview(
                     candidate,
                     interview_at=data["interview_at"],
@@ -673,6 +890,28 @@ class AdminInterviewCandidateScheduleView(_InterviewCandidateAdminQuerysetMixin,
         except InterviewFlowError as err:
             return self.flow_error_response(err)
 
+        action = "RESCHEDULE_INTERVIEW" if was_scheduled else "SCHEDULE_INTERVIEW"
+        application = candidate.application
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action=action,
+            target_type="interview_candidate",
+            target_id=candidate.id,
+            target_label=application.name,
+            summary=f"{'改期安排' if was_scheduled else '安排面试'}：{application.name}",
+            details={
+                "before_round": before_round,
+                "current_round": candidate.interview_round,
+                "interview_at": candidate.interview_at.isoformat() if candidate.interview_at else "",
+                "interviewer": candidate.interviewer,
+                "interview_location": candidate.interview_location,
+            },
+            application=application,
+            interview_candidate=candidate,
+            region=application.region,
+        )
         output = InterviewCandidateListSerializer(candidate, context={"request": request})
         return Response({"message": "面试安排已保存", "candidate": output.data})
 
@@ -698,6 +937,21 @@ class AdminInterviewCandidateCancelScheduleView(_InterviewCandidateAdminQueryset
         except InterviewFlowError as err:
             return self.flow_error_response(err)
 
+        application = candidate.application
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="CANCEL_INTERVIEW_SCHEDULE",
+            target_type="interview_candidate",
+            target_id=candidate.id,
+            target_label=application.name,
+            summary=f"取消面试安排：{application.name}",
+            details={"interview_candidate_id": candidate.id, "application_id": application.id},
+            application=application,
+            interview_candidate=candidate,
+            region=application.region,
+        )
         output = InterviewCandidateListSerializer(candidate, context={"request": request})
         return Response({"message": "已取消面试安排", "candidate": output.data})
 
@@ -730,6 +984,27 @@ class AdminInterviewCandidateResultView(_InterviewCandidateAdminQuerysetMixin, A
         except InterviewFlowError as err:
             return self.flow_error_response(err)
 
+        application = candidate.application
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="SAVE_INTERVIEW_RESULT",
+            target_type="interview_candidate",
+            target_id=candidate.id,
+            target_label=application.name,
+            summary=f"记录面试结果：{application.name}",
+            details={
+                "interview_candidate_id": candidate.id,
+                "application_id": application.id,
+                "round": candidate.interview_round,
+                "result": candidate.result,
+                "score": candidate.score,
+            },
+            application=application,
+            interview_candidate=candidate,
+            region=application.region,
+        )
         output = InterviewCandidateListSerializer(candidate, context={"request": request})
         return Response({"message": "面试结果已保存", "candidate": output.data})
 
@@ -747,7 +1022,7 @@ class AdminInterviewCandidateBatchAddView(AdminScopedMixin, APIView):
 
         application_ids = serializer.validated_data["application_ids"]
         region_id = self._user_region_scope()
-        app_queryset = Application.objects.filter(id__in=application_ids)
+        app_queryset = Application.objects.select_related("region").filter(id__in=application_ids)
         if region_id:
             app_queryset = app_queryset.filter(region_id=region_id)
 
@@ -782,6 +1057,44 @@ class AdminInterviewCandidateBatchAddView(AdminScopedMixin, APIView):
             )
         )
         added_count = len(existing_after - existing_before)
+        app_map = {app.id: app for app in app_queryset}
+        for application_id in application_ids:
+            application = app_map.get(application_id)
+            if not application:
+                continue
+            is_existing = application_id in existing_before
+            self._write_operation_log(
+                request,
+                user=request.user,
+                module="applications",
+                action="ADD_TO_INTERVIEW_POOL",
+                target_type="application",
+                target_id=application.id,
+                target_label=application.name,
+                summary=f"{application.name}加入拟面试人员{'（已存在）' if is_existing else ''}",
+                details={
+                    "application_id": application.id,
+                    "existing": is_existing,
+                    "added": not is_existing,
+                },
+                application=application,
+                region=application.region,
+            )
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="applications",
+            action="BATCH_ADD_TO_INTERVIEW_POOL",
+            target_type="application_batch",
+            target_label=f"{len(application_ids)}条应聘记录",
+            summary=f"批量加入拟面试人员：新增 {added_count}，已存在 {len(existing_before)}",
+            details={
+                "application_ids": application_ids,
+                "added": added_count,
+                "existing": len(existing_before),
+                "total": len(application_ids),
+            },
+        )
 
         return Response(
             {
@@ -820,11 +1133,301 @@ class AdminInterviewCandidateBatchRemoveView(AdminScopedMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        removed_count = queryset.count()
+        removing_candidates = list(
+            queryset.select_related("application", "application__region")
+        )
+        removed_count = len(removing_candidates)
         queryset.delete()
+        for candidate in removing_candidates:
+            application = candidate.application
+            self._write_operation_log(
+                request,
+                user=request.user,
+                module="interviews",
+                action="REMOVE_FROM_INTERVIEW_POOL",
+                target_type="interview_candidate",
+                target_id=candidate.id,
+                target_label=application.name,
+                summary=f"移出拟面试人员：{application.name}",
+                details={"interview_candidate_id": candidate.id, "application_id": application.id},
+                application=application,
+                region=application.region,
+            )
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="BATCH_REMOVE_FROM_INTERVIEW_POOL",
+            target_type="interview_candidate_batch",
+            target_label=f"{len(interview_candidate_ids)}名候选人",
+            summary=f"批量移出拟面试人员：{removed_count} 人",
+            details={
+                "interview_candidate_ids": interview_candidate_ids,
+                "removed": removed_count,
+                "total": len(interview_candidate_ids),
+            },
+        )
         return Response(
             {
                 "removed": removed_count,
+                "total": len(interview_candidate_ids),
+            }
+        )
+
+
+class AdminTalentPoolCandidateBatchAddView(AdminScopedMixin, APIView):
+    """批量把应聘记录直接加入人才库（淘汰池）。"""
+
+    def post(self, request: Request):
+        serializer = InterviewCandidateBatchAddSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        application_ids = serializer.validated_data["application_ids"]
+        region_id = self._user_region_scope()
+        app_queryset = Application.objects.select_related("region").filter(id__in=application_ids)
+        if region_id:
+            app_queryset = app_queryset.filter(region_id=region_id)
+
+        allowed_ids = set(app_queryset.values_list("id", flat=True))
+        missing_ids = sorted(set(application_ids) - allowed_ids)
+        if missing_ids:
+            return Response(
+                {
+                    "error": "包含无权限或不存在的应聘记录",
+                    "details": {"application_ids": missing_ids},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = timezone.now()
+        moved = 0
+        existing = 0
+        blocked_ids = []
+        default_note = "从应聘记录直接加入人才库"
+        moved_ids = set()
+        existing_ids = set()
+
+        with transaction.atomic():
+            candidates = {
+                item.application_id: item
+                for item in InterviewCandidate.objects.select_for_update().filter(
+                    application_id__in=application_ids
+                )
+            }
+            for app_id in application_ids:
+                candidate = candidates.get(app_id)
+                if candidate is None:
+                    InterviewCandidate.objects.create(
+                        application_id=app_id,
+                        status=InterviewCandidate.STATUS_COMPLETED,
+                        result=InterviewCandidate.RESULT_REJECT,
+                        result_at=now,
+                        note=default_note,
+                    )
+                    moved += 1
+                    moved_ids.add(app_id)
+                    continue
+
+                if (
+                    candidate.status == InterviewCandidate.STATUS_COMPLETED
+                    and candidate.result == InterviewCandidate.RESULT_PASS
+                ):
+                    blocked_ids.append(app_id)
+                    continue
+
+                if (
+                    candidate.status == InterviewCandidate.STATUS_COMPLETED
+                    and candidate.result == InterviewCandidate.RESULT_REJECT
+                ):
+                    existing += 1
+                    existing_ids.add(app_id)
+                    continue
+
+                candidate.status = InterviewCandidate.STATUS_COMPLETED
+                candidate.result = InterviewCandidate.RESULT_REJECT
+                candidate.result_at = now
+                candidate.interview_at = None
+                candidate.interviewer = ""
+                candidate.interview_location = ""
+                candidate.score = None
+                candidate.result_note = candidate.result_note or ""
+                candidate.note = candidate.note or default_note
+                candidate.save(
+                    update_fields=[
+                        "status",
+                        "result",
+                        "result_at",
+                        "interview_at",
+                        "interviewer",
+                        "interview_location",
+                        "score",
+                        "result_note",
+                        "note",
+                        "updated_at",
+                    ]
+                )
+                moved += 1
+                moved_ids.add(app_id)
+
+        app_map = {app.id: app for app in app_queryset}
+        blocked_set = set(blocked_ids)
+        for application_id in application_ids:
+            application = app_map.get(application_id)
+            if not application:
+                continue
+            if application_id in blocked_set:
+                result_value = OperationLog.RESULT_FAILED
+                summary = f"{application.name}加入人才库失败：候选人已通过"
+            elif application_id in existing_ids:
+                result_value = OperationLog.RESULT_SUCCESS
+                summary = f"{application.name}加入人才库（已在人才库）"
+            elif application_id in moved_ids:
+                result_value = OperationLog.RESULT_SUCCESS
+                summary = f"{application.name}加入人才库"
+            else:
+                result_value = OperationLog.RESULT_FAILED
+                summary = f"{application.name}加入人才库失败"
+
+            self._write_operation_log(
+                request,
+                user=request.user,
+                module="applications",
+                action="ADD_TO_TALENT_POOL",
+                result=result_value,
+                target_type="application",
+                target_id=application.id,
+                target_label=application.name,
+                summary=summary,
+                details={
+                    "application_id": application.id,
+                    "moved": application_id in moved_ids,
+                    "existing": application_id in existing_ids,
+                    "blocked": application_id in blocked_set,
+                },
+                application=application,
+                region=application.region,
+            )
+
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="applications",
+            action="BATCH_ADD_TO_TALENT_POOL",
+            target_type="application_batch",
+            target_label=f"{len(application_ids)}条应聘记录",
+            summary=f"批量加入人才库：加入 {moved}，已在库 {existing}，拦截 {len(blocked_ids)}",
+            details={
+                "application_ids": application_ids,
+                "moved": moved,
+                "existing": existing,
+                "blocked": len(blocked_ids),
+                "blocked_application_ids": blocked_ids,
+                "total": len(application_ids),
+            },
+        )
+
+        return Response(
+            {
+                "moved": moved,
+                "existing": existing,
+                "blocked": len(blocked_ids),
+                "blocked_application_ids": blocked_ids,
+                "total": len(application_ids),
+            }
+        )
+
+
+class AdminTalentPoolCandidateBatchToInterviewView(AdminScopedMixin, APIView):
+    """批量把人才库候选人重新加入拟面试人员。"""
+
+    def post(self, request: Request):
+        serializer = InterviewCandidateBatchRemoveSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        interview_candidate_ids = serializer.validated_data["interview_candidate_ids"]
+        region_id = self._user_region_scope()
+
+        with transaction.atomic():
+            queryset = InterviewCandidate.objects.select_for_update().filter(
+                id__in=interview_candidate_ids,
+                status=InterviewCandidate.STATUS_COMPLETED,
+                result=InterviewCandidate.RESULT_REJECT,
+            )
+            if region_id:
+                queryset = queryset.filter(application__region_id=region_id)
+
+            allowed_ids = set(queryset.values_list("id", flat=True))
+            missing_ids = sorted(set(interview_candidate_ids) - allowed_ids)
+            if missing_ids:
+                return Response(
+                    {
+                        "error": "包含无权限、不存在或非人才库状态的记录",
+                        "details": {"interview_candidate_ids": missing_ids},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            moving_candidates = list(
+                queryset.select_related("application", "application__region")
+            )
+            moved = len(moving_candidates)
+
+            # 直接复位原记录，避免删除重建导致候选人ID变化。
+            queryset.update(
+                status=InterviewCandidate.STATUS_PENDING,
+                interview_round=1,
+                interview_at=None,
+                interviewer="",
+                interview_location="",
+                result="",
+                score=None,
+                result_note="",
+                result_at=None,
+                note="",
+                updated_at=timezone.now(),
+            )
+
+        for candidate in moving_candidates:
+            application = candidate.application
+            self._write_operation_log(
+                request,
+                user=request.user,
+                module="talent",
+                action="MOVE_TALENT_TO_INTERVIEW",
+                target_type="interview_candidate",
+                target_id=candidate.id,
+                target_label=application.name,
+                summary=f"{application.name}从人才库加入拟面试人员",
+                details={"interview_candidate_id": candidate.id, "application_id": application.id},
+                application=application,
+                region=application.region,
+            )
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="talent",
+            action="BATCH_MOVE_TALENT_TO_INTERVIEW",
+            target_type="interview_candidate_batch",
+            target_label=f"{len(interview_candidate_ids)}名候选人",
+            summary=f"批量从人才库加入拟面试人员：{moved} 人",
+            details={
+                "interview_candidate_ids": interview_candidate_ids,
+                "moved": moved,
+                "total": len(interview_candidate_ids),
+            },
+        )
+
+        return Response(
+            {
+                "moved": moved,
                 "total": len(interview_candidate_ids),
             }
         )

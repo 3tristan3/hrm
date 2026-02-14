@@ -119,7 +119,9 @@
               <p class="header-sub">维护各地区岗位信息与上架状态</p>
             </div>
             <div class="header-actions">
-              <span class="chip">{{ jobs.length }} 个岗位</span>
+              <span class="chip">
+                {{ hasJobKeyword ? `${filteredJobs.length} / ${jobs.length} 个岗位` : `${jobs.length} 个岗位` }}
+              </span>
             </div>
           </div>
           <div class="card-body job-body">
@@ -129,10 +131,30 @@
                 <button class="btn btn-sm btn-default" @click="fetchJobs">刷新列表</button>
               </div>
               <div class="job-toolbar-right">
+                <div class="job-search input-with-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+                  </svg>
+                  <input
+                    v-model.trim="jobFilters.keyword"
+                    type="text"
+                    placeholder="搜索岗位名称/地区/职责"
+                    aria-label="搜索岗位"
+                  />
+                </div>
+                <button class="btn btn-sm btn-default" :disabled="!hasJobKeyword" @click="resetJobFilters">清空</button>
                 <span class="chip subtle">已选 {{ selectedJobsCount }} 个</span>
                 <button
-                  class="btn btn-sm btn-default"
-                  :disabled="selectedJobIds.length === 0"
+                  class="btn btn-sm btn-activate"
+                  :disabled="!canBatchActivateJobs"
+                  @click="batchActivateJobs"
+                >
+                  批量上架
+                </button>
+                <button
+                  class="btn btn-sm btn-deactivate"
+                  :disabled="!canBatchDeactivateJobs"
                   @click="batchDeactivateJobs"
                 >
                   批量下架
@@ -164,7 +186,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in jobs" :key="item.id">
+                  <tr v-for="item in filteredJobs" :key="item.id">
                     <td>
                       <input type="checkbox" :value="item.id" v-model="selectedJobIds" />
                     </td>
@@ -324,6 +346,14 @@
                 @click="addSelectedToInterviewPool"
               >
                 加入拟面试人员<span v-if="selectedApplicationsCount">（{{ selectedApplicationsCount }}）</span>
+              </button>
+              <button
+                class="btn btn-sm btn-talent"
+                type="button"
+                :disabled="selectedApplicationsCount === 0"
+                @click="addSelectedToTalentPool"
+              >
+                加入人才库<span v-if="selectedApplicationsCount">（{{ selectedApplicationsCount }}）</span>
               </button>
               <button class="btn btn-sm btn-default" type="button" @click="refreshApplications">刷新数据</button>
             </div>
@@ -491,26 +521,211 @@
         <InterviewPassedCard
           v-else-if="activeTab === 'passed'"
           :items="passedCandidates"
+          :filtered-items="filteredPassedCandidates"
+          :job-categories="passedJobCategories"
+          :filters="passedFilters"
+          :interview-status-class="interviewStatusClass"
+          :interview-status-text="interviewStatusText"
+          :selected-ids="selectedPassedIds"
+          :is-all-visible-selected="isAllVisiblePassedSelected"
           title="面试通过人员"
           count-prefix="已通过"
           empty-text="暂无面试通过人员"
           :pagination="passedPagination"
           :loading="dataLoading.passed"
           @refresh="refreshPassedCandidates"
+          @reset-filters="resetPassedFilters"
+          @open-detail="openApplicationFromOutcome"
+          @update:selected-ids="selectedPassedIds = $event"
+          @update:is-all-visible-selected="isAllVisiblePassedSelected = $event"
           @change-page="changePassedPage"
         />
 
         <InterviewPassedCard
           v-else-if="activeTab === 'talent'"
           :items="talentPoolCandidates"
+          :filtered-items="filteredTalentCandidates"
+          :job-categories="talentJobCategories"
+          :filters="talentFilters"
+          :interview-status-class="interviewStatusClass"
+          :interview-status-text="interviewStatusText"
+          :selected-ids="selectedTalentIds"
+          :is-all-visible-selected="isAllVisibleTalentSelected"
           title="人才库"
           count-prefix="已入库"
           empty-text="暂无人才库人员"
+          :show-primary-action="true"
+          primary-action-label="加入拟面试人员"
+          primary-action-class="btn-primary"
+          :primary-action-disabled="selectedTalentCount === 0"
           :pagination="talentPagination"
           :loading="dataLoading.talent"
           @refresh="refreshTalentPoolCandidates"
+          @reset-filters="resetTalentFilters"
+          @open-detail="openApplicationFromOutcome"
+          @primary-action="addSelectedTalentToInterviewPool"
+          @update:selected-ids="selectedTalentIds = $event"
+          @update:is-all-visible-selected="isAllVisibleTalentSelected = $event"
           @change-page="changeTalentPage"
         />
+
+        <div v-else-if="activeTab === 'operationLogs'" class="card operation-log-card">
+          <div class="card-header op-header">
+            <div>
+              <h3>操作日志</h3>
+              <p class="header-sub">审计轨迹</p>
+            </div>
+            <div class="op-header-metrics">
+              <span class="chip chip-subtle">当前页 {{ operationLogs.length }} 条</span>
+              <span class="chip chip-pass">成功 {{ operationLogSuccessCount }}</span>
+              <span class="chip chip-reject">失败 {{ operationLogFailedCount }}</span>
+              <button class="btn btn-sm btn-default" type="button" @click="refreshOperationLogs">刷新数据</button>
+            </div>
+          </div>
+          <div class="card-body op-body">
+            <div class="op-filter-panel">
+              <div class="filter-actions log-filters">
+                <div class="filter-field">
+                  <label>模块</label>
+                  <div class="op-field-control">
+                    <select v-model="operationLogFilters.module">
+                      <option value="">全部模块</option>
+                      <option v-for="item in operationModuleOptions" :key="item.value" :value="item.value">
+                        {{ item.label }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                <div class="filter-field">
+                  <label>操作人</label>
+                  <div class="op-field-control">
+                    <input
+                      v-model.trim="operationLogFilters.operator"
+                      type="text"
+                      placeholder="输入账号名"
+                      @keyup.enter="searchOperationLogs"
+                    />
+                  </div>
+                </div>
+                <div class="filter-field">
+                  <label>开始日期</label>
+                  <div class="op-field-control">
+                    <input v-model="operationLogFilters.date_from" type="date" />
+                  </div>
+                </div>
+                <div class="filter-field">
+                  <label>结束日期</label>
+                  <div class="op-field-control">
+                    <input v-model="operationLogFilters.date_to" type="date" />
+                  </div>
+                </div>
+                <div class="filter-field op-search-actions">
+                  <button class="btn btn-sm btn-primary" type="button" @click="searchOperationLogs">查询</button>
+                  <button
+                    class="btn btn-sm btn-default"
+                    type="button"
+                    @click="resetOperationLogFilters(); searchOperationLogs()"
+                  >
+                    重置
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="op-table-wrap">
+              <table class="data-table passed-table operation-log-table">
+                <thead>
+                  <tr>
+                    <th width="16%">时间</th>
+                    <th width="10%">操作人</th>
+                    <th width="11%">模块</th>
+                    <th width="14%">动作</th>
+                    <th width="13%">对象</th>
+                    <th width="8%">结果</th>
+                    <th width="28%">摘要</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="item in operationLogs"
+                    :key="item.id"
+                    class="op-row"
+                    :class="{ failed: item.result === 'failed' }"
+                  >
+                    <td>{{ formatTime(item.created_at) }}</td>
+                    <td>{{ item.operator_username || "-" }}</td>
+                    <td>
+                      <span class="op-module-tag" :class="`mod-${item.module || 'default'}`">
+                        {{ operationModuleLabel(item.module) }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="op-action-text">{{ operationActionLabel(item.action) }}</span>
+                    </td>
+                    <td class="font-medium">{{ item.target_label || "-" }}</td>
+                    <td>
+                      <span class="chip" :class="operationResultClass(item.result)">
+                        {{ operationResultLabel(item.result) }}
+                      </span>
+                    </td>
+                    <td class="log-summary-cell">
+                      <div class="log-summary-main">{{ item.summary || "-" }}</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!operationLogs.length && !dataLoading.operationLogs" class="empty-state">
+                暂无操作日志
+              </div>
+            </div>
+            <div v-if="operationLogsQueried" class="list-pagination op-pagination">
+              <div class="pagination-meta">
+                第 {{ operationLogPagination.page }} 页
+              </div>
+              <div class="op-pagination-right">
+                <div class="op-page-size">
+                  <span>每页</span>
+                  <select
+                    :value="operationLogPagination.pageSize"
+                    @change="changeOperationLogPageSize($event.target.value)"
+                  >
+                    <option v-for="size in operationLogPageSizeOptions" :key="size" :value="size">
+                      {{ size }}
+                    </option>
+                  </select>
+                </div>
+                <div class="pagination-actions">
+                  <button
+                    class="btn btn-xs btn-default"
+                    type="button"
+                    :disabled="operationLogPagination.page <= 1"
+                    @click="changeOperationLogPage('previous')"
+                  >
+                    上一页
+                  </button>
+                  <button
+                    v-for="item in operationLogPageItems"
+                    :key="item.key"
+                    class="op-page-btn"
+                    :class="{ active: item.type === 'page' && item.value === operationLogPagination.page }"
+                    type="button"
+                    :disabled="item.type !== 'page' || (item.value !== 1 && typeof operationLogPageCursorMap[item.value] !== 'string')"
+                    @click="item.type === 'page' && changeOperationLogPage(item.value)"
+                  >
+                    {{ item.type === "page" ? item.value : "..." }}
+                  </button>
+                  <button
+                    class="btn btn-xs btn-default"
+                    type="button"
+                    :disabled="!operationLogPagination.next"
+                    @click="changeOperationLogPage('next')"
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div v-else class="card">
           <div class="card-body">暂无内容</div>
@@ -607,6 +822,32 @@
                 </div>
               </div>
             </div>
+            <div class="detail-section detail-log-section">
+              <div class="section-title">操作日志</div>
+              <div v-if="applicationLogsLoading" class="detail-loading-inline">正在加载操作日志...</div>
+              <div v-else-if="applicationOperationLogs.length" class="detail-log-timeline">
+                <div v-for="item in applicationOperationLogs" :key="item.id" class="detail-log-node">
+                  <span class="detail-log-dot" :class="item.result === 'success' ? 'success' : 'failed'"></span>
+                  <div class="detail-log-item">
+                    <div class="detail-log-meta">
+                      <span class="detail-log-time">{{ formatTime(item.created_at) }}</span>
+                      <span class="detail-log-operator">{{ item.operator_username || "-" }}</span>
+                      <span class="chip" :class="operationResultClass(item.result)">
+                        {{ operationResultLabel(item.result) }}
+                      </span>
+                    </div>
+                    <div class="detail-log-content">
+                      <span class="op-module-tag mini" :class="`mod-${item.module || 'default'}`">
+                        {{ operationModuleLabel(item.module) }}
+                      </span>
+                      <strong>{{ operationActionLabel(item.action) }}</strong>
+                    </div>
+                    <div class="detail-log-summary">{{ item.summary || "-" }}</div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty-state">暂无操作日志</div>
+            </div>
           </div>
         </div>
       </div>
@@ -697,7 +938,17 @@ import InterviewCandidatesModule from './components/InterviewCandidatesModule.vu
 import InterviewPassedCard from './components/InterviewPassedCard.vue';
 import { buildApiUrl, resolveAssetUrl } from "./config/runtime";
 import { useJobCategoryFilter } from "./composables/useJobCategoryFilter";
+import { useSelectionState } from "./composables/useSelectionState";
+import { useConfirmAction } from "./composables/useConfirmAction";
 import { createInterviewApi } from "./api/interview";
+import { getInterviewStatusClass, getInterviewStatusText } from "./utils/interviewStatus";
+import {
+  DEFAULT_OPERATION_LOG_META,
+  buildOperationModuleOptions,
+  normalizeOperationLogMeta,
+  resolveOperationActionLabel,
+  resolveOperationModuleLabel,
+} from "./constants/operationLog";
 
 const toastRef = ref(null);
 const confirmRef = ref(null);
@@ -783,6 +1034,11 @@ const resetPageState = (state) => {
   state.next = "";
   state.previous = "";
 };
+const resetOperationLogPageState = () => {
+  resetPageState(operationLogPagination);
+  operationLogPagination.cursor = "";
+  operationLogPageCursorMap.value = { 1: "" };
+};
 
 // === 状态管理 ===
 const token = ref(localStorage.getItem("admin_token") || "");
@@ -797,6 +1053,7 @@ const tabs = [
   { key: "interviews", label: "拟面试人员", adminOnly: false },
   { key: "passed", label: "面试通过人员", adminOnly: false },
   { key: "talent", label: "人才库", adminOnly: false },
+  { key: "operationLogs", label: "操作日志", adminOnly: false },
   { key: "accounts", label: "账号管理", adminOnly: true },
 ];
 
@@ -807,6 +1064,9 @@ const selfPasswordForm = reactive({ old_password: "", new_password: "", confirm_
 const selectedJobIds = ref([]);
 const selectedApplicationIds = ref([]);
 const selectedInterviewIds = ref([]);
+const selectedPassedIds = ref([]);
+const selectedTalentIds = ref([]);
+const jobFilters = reactive({ keyword: "" });
 const showJobForm = ref(false);
 const showInterviewScheduleForm = ref(false);
 const showInterviewResultForm = ref(false);
@@ -816,6 +1076,14 @@ const resultSaving = ref(false);
 const interviewTimeSort = ref("none");
 const applicationFilters = reactive({ job: "all", region: "" });
 const interviewFilters = reactive({ job: "all", region: "", keyword: "" });
+const passedFilters = reactive({ job: "all" });
+const talentFilters = reactive({ job: "all" });
+const operationLogFilters = reactive({
+  module: "",
+  operator: "",
+  date_from: "",
+  date_to: "",
+});
 const interviewScheduleForm = reactive({
   id: null,
   name: "",
@@ -842,15 +1110,28 @@ const applications = ref([]);
 const interviewCandidates = ref([]);
 const passedCandidates = ref([]);
 const talentPoolCandidates = ref([]);
+const operationLogs = ref([]);
 const passedPagination = reactive(createPageState());
 const talentPagination = reactive(createPageState());
+const operationLogPagination = reactive({
+  ...createPageState(),
+  cursor: "",
+});
+const operationLogPageCursorMap = ref({ 1: "" });
 const interviewMeta = reactive(createInterviewMeta());
 const users = ref([]);
 const userProfile = reactive({ can_view_all: false, region_name: "", region_id: null, is_superuser: false });
 const activeApplication = ref(null);
 const applicationDetailLoading = ref(false);
-const dataLoaded = reactive({ regions: false, jobs: false, applications: false, interviews: false, passed: false, talent: false, interviewMeta: false, users: false });
-const dataLoading = reactive({ regions: false, jobs: false, applications: false, interviews: false, passed: false, talent: false, interviewMeta: false, users: false });
+const applicationOperationLogs = ref([]);
+const applicationLogsLoading = ref(false);
+const operationLogsQueried = ref(false);
+const operationLogMeta = reactive({
+  ...normalizeOperationLogMeta(DEFAULT_OPERATION_LOG_META),
+  loaded: false,
+});
+const dataLoaded = reactive({ regions: false, jobs: false, applications: false, interviews: false, passed: false, talent: false, operationLogs: false, interviewMeta: false, users: false });
+const dataLoading = reactive({ regions: false, jobs: false, applications: false, interviews: false, passed: false, talent: false, operationLogs: false, interviewMeta: false, users: false });
 
 // === 计算属性 ===
 const visibleTabs = computed(() =>
@@ -861,7 +1142,7 @@ const interviewRoundHint = computed(() => {
   if (interviewScheduleHasExisting.value) {
     return `第${round}轮（改期）`;
   }
-  return `第${round}轮（自动）`;
+  return `第${round}轮`;
 });
 const interviewResultOptions = computed(() => {
   const preferredOrder = [
@@ -889,6 +1170,95 @@ const currentTitle = computed(
 );
 const userInitial = computed(() => (currentUsername.value ? currentUsername.value[0].toUpperCase() : "A"));
 const showRegionFilter = computed(() => userProfile.can_view_all || userProfile.is_superuser);
+const hasJobKeyword = computed(() => Boolean(jobFilters.keyword.trim()));
+const filteredJobs = computed(() => {
+  const keyword = jobFilters.keyword.trim().toLowerCase();
+  if (!keyword) return jobs.value;
+  return jobs.value.filter((item) =>
+    [
+      item?.title,
+      item?.region_name,
+      item?.description,
+      item?.salary,
+      item?.education,
+      item?.is_active ? "上架 启用" : "下架 停用",
+      item?.region,
+    ]
+      .filter((value) => value !== null && value !== undefined)
+      .some((value) => String(value).toLowerCase().includes(keyword))
+  );
+});
+const selectedJobStats = computed(() => {
+  const selectedSet = new Set(selectedJobIds.value);
+  let activeCount = 0;
+  let inactiveCount = 0;
+  jobs.value.forEach((item) => {
+    if (!selectedSet.has(item.id)) return;
+    if (item.is_active) activeCount += 1;
+    else inactiveCount += 1;
+  });
+  return {
+    activeCount,
+    inactiveCount,
+  };
+});
+const canBatchActivateJobs = computed(() => selectedJobStats.value.inactiveCount > 0);
+const canBatchDeactivateJobs = computed(() => selectedJobStats.value.activeCount > 0);
+const operationModuleOptions = computed(() =>
+  buildOperationModuleOptions(operationLogs.value, operationLogMeta.module_labels)
+);
+const operationLogSuccessCount = computed(
+  () => operationLogs.value.filter((item) => item?.result === "success").length
+);
+const operationLogFailedCount = computed(
+  () => operationLogs.value.filter((item) => item?.result === "failed").length
+);
+const operationLogPageSizeOptions = computed(() =>
+  Array.isArray(operationLogMeta.page_size_options) && operationLogMeta.page_size_options.length
+    ? operationLogMeta.page_size_options
+    : DEFAULT_OPERATION_LOG_META.page_size_options
+);
+const operationLogKnownMaxPage = computed(() => {
+  const knownPages = Object.keys(operationLogPageCursorMap.value || {})
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item) && item > 0);
+  return knownPages.length ? Math.max(...knownPages) : 1;
+});
+const operationLogPageItems = computed(() => {
+  const maxPage = Math.max(operationLogKnownMaxPage.value, 1);
+  const current = Math.max(Number(operationLogPagination.page || 1), 1);
+  if (maxPage <= 7) {
+    return Array.from({ length: maxPage }, (_, index) => ({
+      type: "page",
+      value: index + 1,
+      key: `page-${index + 1}`,
+    }));
+  }
+
+  const pageSet = new Set([1, maxPage, current - 1, current, current + 1]);
+  if (current <= 3) [2, 3, 4].forEach((page) => pageSet.add(page));
+  if (current >= maxPage - 2) [maxPage - 1, maxPage - 2, maxPage - 3].forEach((page) => pageSet.add(page));
+  const sortedPages = Array.from(pageSet)
+    .filter((page) => page >= 1 && page <= maxPage)
+    .sort((a, b) => a - b);
+
+  const items = [];
+  sortedPages.forEach((page, index) => {
+    const previousPage = sortedPages[index - 1];
+    if (index > 0 && page - previousPage > 1) {
+      items.push({
+        type: "ellipsis",
+        key: `ellipsis-${previousPage}-${page}`,
+      });
+    }
+    items.push({
+      type: "page",
+      value: page,
+      key: `page-${page}`,
+    });
+  });
+  return items;
+});
 const { jobCategories, filteredItems: filteredApplications } = useJobCategoryFilter(
   applications,
   applicationFilters,
@@ -949,33 +1319,39 @@ const sortedInterviewCandidates = computed(() => {
   return list;
 });
 
-const selectedJobsCount = computed(() => selectedJobIds.value.length);
+const { jobCategories: passedJobCategories, filteredItems: filteredPassedCandidates } =
+  useJobCategoryFilter(passedCandidates, passedFilters, {
+    titleKey: "job_title",
+    regionKey: "region_name",
+    jobFilterKey: "job",
+    allValue: "all",
+    allLabel: "全部岗位",
+    unknownJobLabel: "未填写岗位",
+  });
+
+const { jobCategories: talentJobCategories, filteredItems: filteredTalentCandidates } =
+  useJobCategoryFilter(talentPoolCandidates, talentFilters, {
+    titleKey: "job_title",
+    regionKey: "region_name",
+    jobFilterKey: "job",
+    allValue: "all",
+    allLabel: "全部岗位",
+    unknownJobLabel: "未填写岗位",
+  });
+
 const selectedApplicationsCount = computed(() => selectedApplicationIds.value.length);
-const selectedInterviewCount = computed(() => selectedInterviewIds.value.length);
-const isAllJobsSelected = computed({
-  get() {
-    return jobs.value.length > 0 && jobs.value.every((job) => selectedJobIds.value.includes(job.id));
-  },
-  set(value) {
-    selectedJobIds.value = value ? jobs.value.map((job) => job.id) : [];
-  }
-});
-const isAllVisibleInterviewsSelected = computed({
-  get() {
-    const visibleIds = filteredInterviewCandidates.value.map((item) => item.id);
-    if (!visibleIds.length) return false;
-    return visibleIds.every((id) => selectedInterviewIds.value.includes(id));
-  },
-  set(value) {
-    const visibleIds = filteredInterviewCandidates.value.map((item) => item.id);
-    if (value) {
-      selectedInterviewIds.value = Array.from(new Set([...selectedInterviewIds.value, ...visibleIds]));
-      return;
-    }
-    const visibleSet = new Set(visibleIds);
-    selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => !visibleSet.has(id));
-  },
-});
+const { selectedCount: selectedJobsCount, isAllVisibleSelected: isAllJobsSelected } =
+  useSelectionState(selectedJobIds, filteredJobs);
+const {
+  selectedCount: selectedInterviewCount,
+  isAllVisibleSelected: isAllVisibleInterviewsSelected,
+} = useSelectionState(selectedInterviewIds, filteredInterviewCandidates);
+const { isAllVisibleSelected: isAllVisiblePassedSelected } =
+  useSelectionState(selectedPassedIds, filteredPassedCandidates);
+const {
+  selectedCount: selectedTalentCount,
+  isAllVisibleSelected: isAllVisibleTalentSelected,
+} = useSelectionState(selectedTalentIds, filteredTalentCandidates);
 
 // === API 请求封装 ===
 const extractErrorMessage = (payload) => {
@@ -1027,6 +1403,25 @@ const request = async (url, options = {}) => {
 };
 
 const interviewApi = createInterviewApi({ adminBase, request });
+const withQuery = (url, params = {}) => {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") return;
+    query.set(key, String(value));
+  });
+  const search = query.toString();
+  return search ? `${url}?${search}` : url;
+};
+const cursorFromLink = (link) => {
+  if (!link) return "";
+  try {
+    const parsed = new URL(link, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    return parsed.searchParams.get("cursor") || "";
+  } catch {
+    const matched = String(link).match(/[?&]cursor=([^&]+)/);
+    return matched ? decodeURIComponent(matched[1]) : "";
+  }
+};
 
 const notifyError = (err) => {
   console.error(err);
@@ -1037,6 +1432,10 @@ const notifyError = (err) => {
 const notifySuccess = (msg) => {
   toastRef.value?.show(msg, 'success');
 };
+const { askConfirm, runWithConfirm } = useConfirmAction(confirmRef, {
+  onError: notifyError,
+  onSuccess: notifySuccess,
+});
 
 // === 业务逻辑 ===
 const fetchPublicRegions = async () => {
@@ -1148,6 +1547,12 @@ const loadPassedCandidates = async (force = false, page = passedPagination.page)
       page_size: passedPagination.pageSize,
     });
     passedCandidates.value = applyListPagePayload(passedPagination, payload, page);
+    const availableIds = new Set(passedCandidates.value.map((item) => item.id));
+    selectedPassedIds.value = selectedPassedIds.value.filter((id) => availableIds.has(id));
+    const availableJobs = passedJobCategories.value.map((item) => item.value);
+    if (!availableJobs.includes(passedFilters.job)) {
+      passedFilters.job = "all";
+    }
     dataLoaded.passed = true;
   } catch (err) {
     notifyError(err);
@@ -1167,11 +1572,116 @@ const loadTalentPoolCandidates = async (force = false, page = talentPagination.p
       page_size: talentPagination.pageSize,
     });
     talentPoolCandidates.value = applyListPagePayload(talentPagination, payload, page);
+    const availableIds = new Set(talentPoolCandidates.value.map((item) => item.id));
+    selectedTalentIds.value = selectedTalentIds.value.filter((id) => availableIds.has(id));
+    const availableJobs = talentJobCategories.value.map((item) => item.value);
+    if (!availableJobs.includes(talentFilters.job)) {
+      talentFilters.job = "all";
+    }
     dataLoaded.talent = true;
   } catch (err) {
     notifyError(err);
   } finally {
     dataLoading.talent = false;
+  }
+};
+
+const loadOperationLogMeta = async (force = false) => {
+  if (operationLogMeta.loaded && !force) return;
+  try {
+    const payload = await request(`${adminBase}/operation-logs/meta/`);
+    const normalized = normalizeOperationLogMeta(payload);
+    operationLogMeta.module_labels = normalized.module_labels;
+    operationLogMeta.action_labels = normalized.action_labels;
+    operationLogMeta.result_labels = normalized.result_labels;
+    operationLogMeta.page_size_options = normalized.page_size_options;
+    operationLogMeta.default_recent_days = normalized.default_recent_days;
+    operationLogMeta.pagination_mode = normalized.pagination_mode;
+    const availableSizes = operationLogPageSizeOptions.value;
+    if (!availableSizes.includes(Number(operationLogPagination.pageSize))) {
+      operationLogPagination.pageSize = availableSizes[0] || LIST_PAGE_SIZE;
+    }
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    operationLogMeta.loaded = true;
+  }
+};
+
+const loadOperationLogs = async (force = false, cursor = "", page = 1) => {
+  if (dataLoading.operationLogs) return;
+  const targetCursor = String(cursor || "");
+  if (!force && dataLoaded.operationLogs && targetCursor === String(operationLogPagination.cursor || "")) {
+    return;
+  }
+  operationLogsQueried.value = true;
+  dataLoading.operationLogs = true;
+  try {
+    const payload = await request(
+      withQuery(`${adminBase}/operation-logs/`, {
+        page_size: operationLogPagination.pageSize,
+        cursor: targetCursor,
+        ...operationLogFilters,
+      })
+    );
+    operationLogs.value = Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload)
+        ? payload
+        : [];
+    const targetPage = Math.max(Number(page || 1), 1);
+    operationLogPagination.page = targetPage;
+    operationLogPagination.next = payload?.next || "";
+    operationLogPagination.previous = payload?.previous || "";
+    operationLogPagination.cursor = targetCursor;
+    operationLogPageCursorMap.value[targetPage] = targetCursor;
+    const previousCursor = cursorFromLink(payload?.previous || "");
+    if (targetPage > 1 && previousCursor) {
+      operationLogPageCursorMap.value[targetPage - 1] = previousCursor;
+    }
+    const nextCursor = cursorFromLink(payload?.next || "");
+    if (nextCursor) {
+      operationLogPageCursorMap.value[targetPage + 1] = nextCursor;
+    } else {
+      Object.keys(operationLogPageCursorMap.value).forEach((key) => {
+        const keyNum = Number(key);
+        if (Number.isFinite(keyNum) && keyNum > targetPage) {
+          delete operationLogPageCursorMap.value[keyNum];
+        }
+      });
+    }
+    dataLoaded.operationLogs = true;
+  } catch (err) {
+    notifyError(err);
+  } finally {
+    dataLoading.operationLogs = false;
+  }
+};
+
+const loadApplicationOperationLogs = async (applicationId) => {
+  if (!applicationId) {
+    applicationOperationLogs.value = [];
+    return;
+  }
+  applicationLogsLoading.value = true;
+  try {
+    const payload = await request(
+      withQuery(`${adminBase}/operation-logs/`, {
+        application_id: applicationId,
+        page: 1,
+        page_size: 20,
+      })
+    );
+    applicationOperationLogs.value = Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload)
+        ? payload
+        : [];
+  } catch (err) {
+    notifyError(err);
+    applicationOperationLogs.value = [];
+  } finally {
+    applicationLogsLoading.value = false;
   }
 };
 
@@ -1215,6 +1725,10 @@ const ensureTabData = async (tabKey, force = false) => {
   }
   if (tabKey === "talent") {
     await Promise.all([loadInterviewMeta(force), loadTalentPoolCandidates(force)]);
+    return;
+  }
+  if (tabKey === "operationLogs") {
+    await loadOperationLogMeta(force);
     return;
   }
   if (tabKey === "accounts") {
@@ -1261,10 +1775,21 @@ const submitAuth = async () => {
     dataLoaded.interviews = false;
     dataLoaded.passed = false;
     dataLoaded.talent = false;
+    dataLoaded.operationLogs = false;
     dataLoaded.interviewMeta = false;
     dataLoaded.users = false;
     resetPageState(passedPagination);
     resetPageState(talentPagination);
+    resetOperationLogPageState();
+    operationLogs.value = [];
+    selectedPassedIds.value = [];
+    selectedTalentIds.value = [];
+    resetJobFilters();
+    resetPassedFilters();
+    resetTalentFilters();
+    resetOperationLogFilters();
+    resetOperationLogMeta();
+    operationLogPagination.pageSize = LIST_PAGE_SIZE;
 
     notifySuccess("登录成功");
     await loadProfile();
@@ -1275,71 +1800,89 @@ const submitAuth = async () => {
 };
 
 const logout = async (silent = false) => {
-  let isConfirmed = true;
-  if (!silent) {
-    isConfirmed = await confirmRef.value.open({
-      title: '退出确认',
-      content: '您确定要退出当前账号吗？',
-      confirmText: '退出',
-      type: 'danger'
-    });
-  }
-  if (isConfirmed) {
-    token.value = "";
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_username");
-    currentUsername.value = "";
-    regions.value = [];
-    jobs.value = [];
-    applications.value = [];
-    interviewCandidates.value = [];
-    passedCandidates.value = [];
-    talentPoolCandidates.value = [];
-    users.value = [];
-    selectedApplicationIds.value = [];
-    selectedInterviewIds.value = [];
-    dataLoaded.regions = false;
-    dataLoaded.jobs = false;
-    dataLoaded.applications = false;
-    dataLoaded.interviews = false;
-    dataLoaded.passed = false;
-    dataLoaded.talent = false;
-    dataLoaded.interviewMeta = false;
-    dataLoaded.users = false;
-    dataLoading.regions = false;
-    dataLoading.jobs = false;
-    dataLoading.applications = false;
-    dataLoading.interviews = false;
-    dataLoading.passed = false;
-    dataLoading.talent = false;
-    dataLoading.interviewMeta = false;
-    dataLoading.users = false;
-    resetPageState(passedPagination);
-    resetPageState(talentPagination);
-    Object.assign(interviewMeta, createInterviewMeta());
-    activeApplication.value = null;
-    applicationDetailLoading.value = false;
-    showInterviewScheduleForm.value = false;
-    scheduleSaving.value = false;
-    resetInterviewScheduleForm();
-    showInterviewResultForm.value = false;
-    resultSaving.value = false;
-    resetInterviewResultForm();
-    resetApplicationFilters();
-    resetInterviewFilters();
-    userProfile.can_view_all = false;
-    userProfile.region_name = "";
-    userProfile.region_id = null;
-    userProfile.is_superuser = false;
-    activeTab.value = "jobs";
-    fetchPublicRegions();
-    if (!silent) notifySuccess("已退出登录");
-  }
+  const isConfirmed =
+    silent ||
+    (await askConfirm({
+      title: "退出确认",
+      content: "您确定要退出当前账号吗？",
+      confirmText: "退出",
+      type: "danger",
+    }));
+  if (!isConfirmed) return;
+
+  token.value = "";
+  localStorage.removeItem("admin_token");
+  localStorage.removeItem("admin_username");
+  currentUsername.value = "";
+  regions.value = [];
+  jobs.value = [];
+  applications.value = [];
+  interviewCandidates.value = [];
+  passedCandidates.value = [];
+  talentPoolCandidates.value = [];
+  operationLogs.value = [];
+  users.value = [];
+  selectedApplicationIds.value = [];
+  selectedInterviewIds.value = [];
+  selectedPassedIds.value = [];
+  selectedTalentIds.value = [];
+  dataLoaded.regions = false;
+  dataLoaded.jobs = false;
+  dataLoaded.applications = false;
+  dataLoaded.interviews = false;
+  dataLoaded.passed = false;
+  dataLoaded.talent = false;
+  dataLoaded.operationLogs = false;
+  dataLoaded.interviewMeta = false;
+  dataLoaded.users = false;
+  dataLoading.regions = false;
+  dataLoading.jobs = false;
+  dataLoading.applications = false;
+  dataLoading.interviews = false;
+  dataLoading.passed = false;
+  dataLoading.talent = false;
+  dataLoading.operationLogs = false;
+  dataLoading.interviewMeta = false;
+  dataLoading.users = false;
+  resetPageState(passedPagination);
+  resetPageState(talentPagination);
+  resetOperationLogPageState();
+  Object.assign(interviewMeta, createInterviewMeta());
+  activeApplication.value = null;
+  applicationDetailLoading.value = false;
+  applicationOperationLogs.value = [];
+  applicationLogsLoading.value = false;
+  showInterviewScheduleForm.value = false;
+  scheduleSaving.value = false;
+  resetInterviewScheduleForm();
+  showInterviewResultForm.value = false;
+  resultSaving.value = false;
+  resetInterviewResultForm();
+  resetJobFilters();
+  resetApplicationFilters();
+  resetInterviewFilters();
+  resetPassedFilters();
+  resetTalentFilters();
+  resetOperationLogFilters();
+  resetOperationLogMeta();
+  operationLogPagination.pageSize = LIST_PAGE_SIZE;
+  userProfile.can_view_all = false;
+  userProfile.region_name = "";
+  userProfile.region_id = null;
+  userProfile.is_superuser = false;
+  activeTab.value = "jobs";
+  fetchPublicRegions();
+  if (!silent) notifySuccess("已退出登录");
 };
 
 // === CRUD 操作 ===
 const regionName = (id) => regions.value.find(r => r.id === id)?.name || "-";
 const formatTime = (v) => v ? new Date(v).toLocaleString() : "-";
+const operationModuleLabel = (value) => resolveOperationModuleLabel(value, operationLogMeta.module_labels);
+const operationActionLabel = (value) => resolveOperationActionLabel(value, operationLogMeta.action_labels);
+const operationResultLabel = (value) =>
+  operationLogMeta.result_labels?.[value] || value || "-";
+const operationResultClass = (value) => (value === "failed" ? "chip-reject" : "chip-pass");
 const toDateTimeLocal = (v) => {
   if (!v) return "";
   const date = new Date(v);
@@ -1353,15 +1896,8 @@ const formatDate = (v) => {
   if (Number.isNaN(date.getTime())) return v;
   return date.toLocaleDateString();
 };
-const interviewStatusClass = (item) => {
-  if (item?.status === interviewMeta.status_scheduled) return "chip-scheduled";
-  if (item?.result === interviewMeta.result_pending) return "chip-pending";
-  return "chip-subtle";
-};
-const interviewStatusText = (item) => {
-  if (item?.result === interviewMeta.result_pending) return interviewMeta.result_pending;
-  return item?.status || interviewMeta.status_pending;
-};
+const interviewStatusClass = (item) => getInterviewStatusClass(item, interviewMeta);
+const interviewStatusText = (item) => getInterviewStatusText(item, interviewMeta);
 const canScheduleInterview = (item) =>
   !(
     item.status === interviewMeta.status_completed &&
@@ -1440,61 +1976,82 @@ const editJob = (item) => {
   showJobForm.value = true;
 };
 const deleteJob = async (id) => {
-  const ok = await confirmRef.value.open({
-    title: '删除岗位',
-    content: '此操作将永久删除该岗位及其关联数据，是否继续？',
-    type: 'danger',
+  await runWithConfirm({
+    confirm: {
+      title: "删除岗位",
+      content: "此操作将永久删除该岗位及其关联数据，是否继续？",
+      type: "danger",
+    },
+    action: async () => {
+      await request(`${adminBase}/jobs/${id}/`, { method: "DELETE" });
+      notifySuccess("删除成功");
+      await loadJobs(true);
+    },
   });
-  if (!ok) return;
-  try {
-    await request(`${adminBase}/jobs/${id}/`, { method: "DELETE" });
-    notifySuccess("删除成功");
-    await loadJobs(true);
-  } catch (err) {
-    notifyError(err);
+};
+const batchUpdateJobsStatus = async (isActive) => {
+  if (!selectedJobIds.value.length) return;
+  const selectedSet = new Set(selectedJobIds.value);
+  const targetJobIds = jobs.value
+    .filter((item) => selectedSet.has(item.id) && item.is_active !== isActive)
+    .map((item) => item.id);
+  if (!targetJobIds.length) {
+    toastRef.value?.show(isActive ? "所选岗位已全部上架" : "所选岗位已全部下架", "info");
+    return;
   }
+
+  const actionText = isActive ? "上架" : "下架";
+  const title = isActive ? "批量上架岗位" : "批量下架岗位";
+  const content = isActive
+    ? `将上架已选中的 ${targetJobIds.length} 个岗位，上架后对应应聘记录将恢复可见，是否继续？`
+    : `将下架已选中的 ${targetJobIds.length} 个岗位，下架后对应应聘记录将不再展示，是否继续？`;
+  await runWithConfirm({
+    confirm: {
+      title,
+      content,
+      type: isActive ? "default" : "danger",
+      confirmText: actionText,
+    },
+    action: async () => {
+      const result = await request(`${adminBase}/jobs/batch-status/`, {
+        method: "POST",
+        body: JSON.stringify({ job_ids: targetJobIds, is_active: isActive }),
+      });
+      notifySuccess(`已${actionText} ${result.updated || 0} 个岗位`);
+      await loadJobs(true);
+      if (dataLoaded.applications) {
+        await loadApplications(true);
+      }
+    },
+  });
+};
+const batchActivateJobs = async () => {
+  await batchUpdateJobsStatus(true);
 };
 const batchDeactivateJobs = async () => {
-  if (!selectedJobIds.value.length) return;
-  const ok = await confirmRef.value.open({
-    title: "批量下架岗位",
-    content: `将下架已选中的 ${selectedJobIds.value.length} 个岗位，下架后对应应聘记录将不再展示，是否继续？`,
-    type: "danger",
-    confirmText: "下架",
-  });
-  if (!ok) return;
-  try {
-    const result = await request(`${adminBase}/jobs/batch-status/`, {
-      method: "POST",
-      body: JSON.stringify({ job_ids: selectedJobIds.value, is_active: false }),
-    });
-    notifySuccess(`已下架 ${result.updated || 0} 个岗位`);
-    await loadJobs(true);
-    if (dataLoaded.applications) {
-      await loadApplications(true);
-    }
-  } catch (err) {
-    notifyError(err);
-  }
+  await batchUpdateJobsStatus(false);
 };
 const batchDeleteJobs = async () => {
   if (!selectedJobIds.value.length) return;
-  const ok = await confirmRef.value.open({
-    title: "批量删除岗位",
-    content: `将删除已选中的 ${selectedJobIds.value.length} 个岗位，是否继续？`,
-    type: "danger",
-    confirmText: "删除"
+  await runWithConfirm({
+    confirm: {
+      title: "批量删除岗位",
+      content: `将删除已选中的 ${selectedJobIds.value.length} 个岗位，是否继续？`,
+      type: "danger",
+      confirmText: "删除",
+    },
+    action: async () => {
+      const ids = [...selectedJobIds.value];
+      const results = await Promise.allSettled(
+        ids.map((targetId) => request(`${adminBase}/jobs/${targetId}/`, { method: "DELETE" }))
+      );
+      const success = results.filter((item) => item.status === "fulfilled").length;
+      const fail = results.length - success;
+      if (success) notifySuccess(`已删除 ${success} 个岗位`);
+      if (fail) toastRef.value?.show(`${fail} 个岗位删除失败`, "error");
+      await loadJobs(true);
+    },
   });
-  if (!ok) return;
-  const ids = [...selectedJobIds.value];
-  const results = await Promise.allSettled(
-    ids.map((id) => request(`${adminBase}/jobs/${id}/`, { method: "DELETE" }))
-  );
-  const success = results.filter((item) => item.status === "fulfilled").length;
-  const fail = results.length - success;
-  if (success) notifySuccess(`已删除 ${success} 个岗位`);
-  if (fail) toastRef.value?.show(`${fail} 个岗位删除失败`, "error");
-  await loadJobs(true);
 };
 const saveJob = async () => {
   const method = jobForm.id ? "PUT" : "POST";
@@ -1554,20 +2111,19 @@ const selectUserForReset = (item) => {
 };
 
 const deleteUser = async (item) => {
-  const ok = await confirmRef.value.open({
-    title: "删除账号",
-    content: `确定删除账号「${item.username}」吗？该操作不可恢复。`,
-    type: "danger",
-    confirmText: "删除"
+  await runWithConfirm({
+    confirm: {
+      title: "删除账号",
+      content: `确定删除账号「${item.username}」吗？该操作不可恢复。`,
+      type: "danger",
+      confirmText: "删除",
+    },
+    action: async () => {
+      await request(`${adminBase}/users/${item.id}/`, { method: "DELETE" });
+      notifySuccess("账号已删除");
+      await loadUsers(true);
+    },
   });
-  if (!ok) return;
-  try {
-    await request(`${adminBase}/users/${item.id}/`, { method: "DELETE" });
-    notifySuccess("账号已删除");
-    await loadUsers(true);
-  } catch (err) {
-    notifyError(err);
-  }
 };
 
 const fetchApplications = async () => {
@@ -1587,6 +2143,10 @@ const fetchJobs = async () => {
   await loadJobs(true);
 };
 
+const resetJobFilters = () => {
+  jobFilters.keyword = "";
+};
+
 const resetApplicationFilters = () => {
   applicationFilters.job = "all";
   applicationFilters.region = "";
@@ -1597,6 +2157,32 @@ const resetInterviewFilters = () => {
   interviewFilters.region = "";
   interviewFilters.keyword = "";
   interviewTimeSort.value = "none";
+};
+
+const resetPassedFilters = () => {
+  passedFilters.job = "all";
+};
+
+const resetTalentFilters = () => {
+  talentFilters.job = "all";
+};
+
+const resetOperationLogFilters = () => {
+  operationLogFilters.module = "";
+  operationLogFilters.operator = "";
+  operationLogFilters.date_from = "";
+  operationLogFilters.date_to = "";
+};
+
+const resetOperationLogMeta = () => {
+  operationLogMeta.module_labels = { ...DEFAULT_OPERATION_LOG_META.module_labels };
+  operationLogMeta.action_labels = { ...DEFAULT_OPERATION_LOG_META.action_labels };
+  operationLogMeta.result_labels = { ...DEFAULT_OPERATION_LOG_META.result_labels };
+  operationLogMeta.page_size_options = [...DEFAULT_OPERATION_LOG_META.page_size_options];
+  operationLogMeta.default_recent_days = DEFAULT_OPERATION_LOG_META.default_recent_days;
+  operationLogMeta.pagination_mode = DEFAULT_OPERATION_LOG_META.pagination_mode;
+  operationLogMeta.loaded = false;
+  operationLogsQueried.value = false;
 };
 
 // 面试时间排序在“升序/降序”间切换
@@ -1721,22 +2307,20 @@ const saveInterviewSchedule = async () => {
 
 // 取消当前已安排的面试（保留候选人在拟面试池）
 const cancelInterviewSchedule = async ({ id, name }) => {
-  const ok = await confirmRef.value.open({
-    title: "取消面试安排",
-    content: `确认取消「${name || "该候选人"}」当前面试安排吗？`,
-    confirmText: "取消安排",
-    type: "danger",
+  const { done } = await runWithConfirm({
+    confirm: {
+      title: "取消面试安排",
+      content: `确认取消「${name || "该候选人"}」当前面试安排吗？`,
+      confirmText: "取消安排",
+      type: "danger",
+    },
+    action: async () => {
+      await interviewApi.cancelSchedule(id);
+      notifySuccess("已取消面试安排");
+      await loadInterviewCandidates(true);
+    },
   });
-  if (!ok) return false;
-  try {
-    await interviewApi.cancelSchedule(id);
-    notifySuccess("已取消面试安排");
-    await loadInterviewCandidates(true);
-    return true;
-  } catch (err) {
-    notifyError(err);
-    return false;
-  }
+  return done;
 };
 
 // 从安排弹窗内触发取消安排
@@ -1831,25 +2415,75 @@ const toggleApplicationSelection = (applicationId) => {
 
 const addSelectedToInterviewPool = async () => {
   if (!selectedApplicationIds.value.length) return;
-  const ok = await confirmRef.value.open({
-    title: "加入拟面试人员",
-    content: `确认将已选 ${selectedApplicationIds.value.length} 人加入拟面试人员吗？`,
-    confirmText: "加入",
-    type: "default",
+  await runWithConfirm({
+    confirm: {
+      title: "加入拟面试人员",
+      content: `确认将已选 ${selectedApplicationIds.value.length} 人加入拟面试人员吗？`,
+      confirmText: "加入",
+      type: "default",
+    },
+    action: async () => {
+      const result = await interviewApi.batchAddFromApplications(selectedApplicationIds.value);
+      const parts = [];
+      if (result.added) parts.push(`新增 ${result.added} 人`);
+      if (result.existing) parts.push(`已存在 ${result.existing} 人`);
+      notifySuccess(parts.length ? `操作完成：${parts.join("，")}` : "操作完成");
+      selectedApplicationIds.value = [];
+      await Promise.all([loadApplications(true), loadInterviewCandidates(true)]);
+      activeTab.value = "interviews";
+    },
   });
-  if (!ok) return;
-  try {
-    const result = await interviewApi.batchAddFromApplications(selectedApplicationIds.value);
-    const parts = [];
-    if (result.added) parts.push(`新增 ${result.added} 人`);
-    if (result.existing) parts.push(`已存在 ${result.existing} 人`);
-    notifySuccess(parts.length ? `操作完成：${parts.join("，")}` : "操作完成");
-    selectedApplicationIds.value = [];
-    await Promise.all([loadApplications(true), loadInterviewCandidates(true)]);
-    activeTab.value = "interviews";
-  } catch (err) {
-    notifyError(err);
-  }
+};
+
+const addSelectedToTalentPool = async () => {
+  if (!selectedApplicationIds.value.length) return;
+  await runWithConfirm({
+    confirm: {
+      title: "加入人才库",
+      content: `确认将已选 ${selectedApplicationIds.value.length} 人加入人才库吗？加入后将从应聘记录中移除。`,
+      confirmText: "确认加入",
+      type: "danger",
+    },
+    action: async () => {
+      const result = await interviewApi.batchAddToTalentPool(selectedApplicationIds.value);
+      const parts = [];
+      if (result.moved) parts.push(`加入 ${result.moved} 人`);
+      if (result.existing) parts.push(`已在人才库 ${result.existing} 人`);
+      if (result.blocked) parts.push(`已通过未处理 ${result.blocked} 人`);
+      notifySuccess(parts.length ? `操作完成：${parts.join("，")}` : "操作完成");
+      selectedApplicationIds.value = [];
+      await loadApplications(true);
+      if (dataLoaded.interviews) {
+        await loadInterviewCandidates(true);
+      }
+      if (dataLoaded.talent) {
+        await loadTalentPoolCandidates(true, 1);
+      } else {
+        dataLoaded.talent = false;
+      }
+    },
+  });
+};
+
+const addSelectedTalentToInterviewPool = async () => {
+  if (!selectedTalentIds.value.length) return;
+  await runWithConfirm({
+    confirm: {
+      title: "加入拟面试人员",
+      content: `确认将已选 ${selectedTalentIds.value.length} 人加入拟面试人员吗？加入后将从人才库移除。`,
+      confirmText: "确认加入",
+      type: "default",
+    },
+    action: async () => {
+      const result = await interviewApi.batchMoveTalentToInterview(selectedTalentIds.value);
+      selectedTalentIds.value = [];
+      await Promise.all([loadTalentPoolCandidates(true, 1), loadInterviewCandidates(true)]);
+      if (dataLoaded.applications) {
+        await loadApplications(true);
+      }
+      notifySuccess(`已加入拟面试人员 ${result.moved || 0} 人`);
+    },
+  });
 };
 
 const refreshInterviewCandidates = async () => {
@@ -1870,14 +2504,64 @@ const changeTalentPage = async (nextPage) => {
   await loadTalentPoolCandidates(true, page);
 };
 
+const changeOperationLogPage = async (target) => {
+  if (target === "next") {
+    if (!operationLogPagination.next) return;
+    await loadOperationLogs(
+      true,
+      cursorFromLink(operationLogPagination.next),
+      operationLogPagination.page + 1
+    );
+    return;
+  }
+  if (target === "previous") {
+    if (!operationLogPagination.previous) return;
+    await loadOperationLogs(
+      true,
+      cursorFromLink(operationLogPagination.previous),
+      Math.max(operationLogPagination.page - 1, 1)
+    );
+    return;
+  }
+  const targetPage = Math.max(Number(target || 1), 1);
+  if (!Number.isFinite(targetPage) || targetPage === operationLogPagination.page) return;
+  const targetCursor = operationLogPageCursorMap.value[targetPage];
+  if (targetPage !== 1 && typeof targetCursor !== "string") return;
+  await loadOperationLogs(true, targetPage === 1 ? "" : targetCursor, targetPage);
+};
+
+const changeOperationLogPageSize = async (nextPageSize) => {
+  const pageSize = Number(nextPageSize || operationLogPagination.pageSize);
+  if (!Number.isFinite(pageSize) || pageSize <= 0) return;
+  if (pageSize === Number(operationLogPagination.pageSize)) return;
+  operationLogPagination.pageSize = pageSize;
+  resetOperationLogPageState();
+  await loadOperationLogs(true, "", 1);
+};
+
 const refreshPassedCandidates = async () => {
   await loadPassedCandidates(true, 1);
+  selectedPassedIds.value = [];
+  resetPassedFilters();
   notifySuccess("面试通过人员列表已刷新");
 };
 
 const refreshTalentPoolCandidates = async () => {
   await loadTalentPoolCandidates(true, 1);
+  selectedTalentIds.value = [];
+  resetTalentFilters();
   notifySuccess("人才库列表已刷新");
+};
+
+const searchOperationLogs = async () => {
+  resetOperationLogPageState();
+  await loadOperationLogs(true, "", 1);
+};
+
+const refreshOperationLogs = async () => {
+  resetOperationLogPageState();
+  await loadOperationLogs(true, "", 1);
+  notifySuccess("操作日志已刷新");
 };
 
 // 统一刷新面试相关模块，避免多处重复刷新逻辑
@@ -1893,39 +2577,37 @@ const refreshInterviewModules = async ({ forcePassed = false, forceTalent = fals
 
 const batchRemoveInterviewCandidates = async () => {
   if (!selectedInterviewIds.value.length) return;
-  const ok = await confirmRef.value.open({
-    title: "批量移出拟面试人员",
-    content: `确认移出已选 ${selectedInterviewIds.value.length} 人吗？`,
-    confirmText: "移出",
-    type: "danger",
+  await runWithConfirm({
+    confirm: {
+      title: "批量移出拟面试人员",
+      content: `确认移出已选 ${selectedInterviewIds.value.length} 人吗？`,
+      confirmText: "移出",
+      type: "danger",
+    },
+    action: async () => {
+      const result = await interviewApi.batchRemoveCandidates(selectedInterviewIds.value);
+      selectedInterviewIds.value = [];
+      await refreshInterviewModules();
+      notifySuccess(`已移出 ${result.removed || 0} 人`);
+    },
   });
-  if (!ok) return;
-  try {
-    const result = await interviewApi.batchRemoveCandidates(selectedInterviewIds.value);
-    selectedInterviewIds.value = [];
-    await refreshInterviewModules();
-    notifySuccess(`已移出 ${result.removed || 0} 人`);
-  } catch (err) {
-    notifyError(err);
-  }
 };
 
 const removeInterviewCandidate = async (item) => {
-  const ok = await confirmRef.value.open({
-    title: "移出拟面试人员",
-    content: `确认将「${item.name || "该应聘者"}」移出拟面试人员吗？`,
-    confirmText: "移出",
-    type: "danger",
+  await runWithConfirm({
+    confirm: {
+      title: "移出拟面试人员",
+      content: `确认将「${item.name || "该应聘者"}」移出拟面试人员吗？`,
+      confirmText: "移出",
+      type: "danger",
+    },
+    action: async () => {
+      await interviewApi.removeCandidate(item.id);
+      selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => id !== item.id);
+      notifySuccess("已移出拟面试人员");
+      await refreshInterviewModules();
+    },
   });
-  if (!ok) return;
-  try {
-    await interviewApi.removeCandidate(item.id);
-    selectedInterviewIds.value = selectedInterviewIds.value.filter((id) => id !== item.id);
-    notifySuccess("已移出拟面试人员");
-    await refreshInterviewModules();
-  } catch (err) {
-    notifyError(err);
-  }
 };
 
 const openApplicationFromInterview = async (item) => {
@@ -1939,15 +2621,31 @@ const openApplicationFromInterview = async (item) => {
   });
 };
 
+const openApplicationFromOutcome = async (item) => {
+  await openApplication({
+    id: item.application_id,
+    name: item.name,
+    job_title: item.job_title,
+    region_name: item.region_name,
+  });
+};
+
 const openApplication = async (item) => {
   applicationDetailLoading.value = true;
+  applicationOperationLogs.value = [];
+  applicationLogsLoading.value = true;
   activeApplication.value = { ...item };
   try {
-    const detail = await request(`${adminBase}/applications/${item.id}/`);
+    const [detail] = await Promise.all([
+      request(`${adminBase}/applications/${item.id}/`),
+      loadApplicationOperationLogs(item.id),
+    ]);
     activeApplication.value = detail;
   } catch (err) {
     notifyError(err);
     activeApplication.value = null;
+    applicationOperationLogs.value = [];
+    applicationLogsLoading.value = false;
   } finally {
     applicationDetailLoading.value = false;
   }
@@ -1956,6 +2654,8 @@ const openApplication = async (item) => {
 const closeApplication = () => {
   activeApplication.value = null;
   applicationDetailLoading.value = false;
+  applicationOperationLogs.value = [];
+  applicationLogsLoading.value = false;
 };
 
 const attachmentCardMeta = Object.freeze([

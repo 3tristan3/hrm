@@ -97,7 +97,9 @@
                 <td>
                   <input type="checkbox" :value="item.id" v-model="localSelectedInterviewIds" />
                 </td>
-                <td class="font-medium">{{ item.name || "-" }}</td>
+                <td class="font-medium">
+                  <DetailNameButton :label="item.name || ''" @open="$emit('open-detail', item)" />
+                </td>
                 <td>{{ item.job_title || "-" }}</td>
                 <td>{{ item.region_name || "-" }}</td>
                 <td>{{ item.phone || "-" }}</td>
@@ -130,9 +132,6 @@
                     @click.stop="$emit('open-result', item)"
                   >
                     记录结果
-                  </button>
-                  <button class="btn btn-xs btn-default" type="button" @click.stop="$emit('open-detail', item)">
-                    查看详情
                   </button>
                   <button class="btn btn-xs btn-danger" type="button" @click.stop="$emit('remove', item)">移出</button>
                 </td>
@@ -177,15 +176,20 @@
               <input :value="interviewRoundHint" disabled />
             </div>
           </div>
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>面试时间</label>
-              <input v-model="interviewScheduleForm.interview_at" type="datetime-local" required />
-            </div>
-            <div class="form-group">
-              <label>面试官</label>
-              <input v-model.trim="interviewScheduleForm.interviewer" placeholder="如：李经理 / 王主管" />
-            </div>
+          <div class="form-group full-width">
+            <label>面试日期与时间 *</label>
+            <DateTimeSlidePicker
+              v-model="interviewScheduleForm.interview_at"
+              :min-date="todayDate"
+              :days="21"
+              start-time="00:00"
+              end-time="23:55"
+              :step-minutes="5"
+            />
+          </div>
+          <div class="form-group full-width">
+            <label>面试官</label>
+            <input v-model.trim="interviewScheduleForm.interviewer" placeholder="李经理 / 王主管" />
           </div>
           <div class="form-group full-width">
             <label>面试地点 / 链接</label>
@@ -193,7 +197,7 @@
           </div>
           <div class="form-group full-width">
             <label>备注</label>
-            <textarea v-model.trim="interviewScheduleForm.note" rows="3" placeholder="可填写面试准备要求、联系人等"></textarea>
+            <textarea v-model.trim="interviewScheduleForm.note" rows="3"></textarea>
           </div>
           <div class="form-actions schedule-form-actions">
             <div class="schedule-form-actions-left">
@@ -275,6 +279,8 @@
 
 <script setup>
 import { computed } from "vue";
+import DetailNameButton from "./DetailNameButton.vue";
+import DateTimeSlidePicker from "./DateTimeSlidePicker.vue";
 
 const props = defineProps({
   filteredInterviewCandidates: { type: Array, default: () => [] },
@@ -334,4 +340,12 @@ const localIsAllVisibleInterviewsSelected = computed({
   get: () => props.isAllVisibleInterviewsSelected,
   set: (value) => emit("update:isAllVisibleInterviewsSelected", value),
 });
+
+const formatDateOffset = (offsetDays = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+const todayDate = formatDateOffset(0);
 </script>

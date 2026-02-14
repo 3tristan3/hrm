@@ -261,3 +261,104 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username}-{self.region.name}"
+
+
+class OperationLog(models.Model):
+    """管理端操作审计日志。"""
+
+    RESULT_SUCCESS = "success"
+    RESULT_FAILED = "failed"
+    RESULT_CHOICES = [
+        (RESULT_SUCCESS, "成功"),
+        (RESULT_FAILED, "失败"),
+    ]
+
+    operator = models.ForeignKey(
+        "auth.User",
+        related_name="operation_logs",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="操作人",
+    )
+    operator_username = models.CharField("操作账号", max_length=150, blank=True, default="")
+    operator_role = models.CharField("操作角色", max_length=50, blank=True, default="")
+    operator_region_name = models.CharField("操作地区", max_length=50, blank=True, default="")
+    region = models.ForeignKey(
+        Region,
+        related_name="operation_logs",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="所属地区",
+    )
+    module = models.CharField("模块", max_length=50)
+    action = models.CharField("动作", max_length=80)
+    target_type = models.CharField("对象类型", max_length=50, blank=True, default="")
+    target_id = models.PositiveIntegerField("对象ID", null=True, blank=True)
+    target_label = models.CharField("对象名称", max_length=200, blank=True, default="")
+    application = models.ForeignKey(
+        Application,
+        related_name="operation_logs",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="关联应聘记录",
+    )
+    interview_candidate = models.ForeignKey(
+        InterviewCandidate,
+        related_name="operation_logs",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="关联拟面试记录",
+    )
+    result = models.CharField("结果", max_length=20, choices=RESULT_CHOICES, default=RESULT_SUCCESS)
+    summary = models.CharField("摘要", max_length=255, blank=True, default="")
+    details = models.JSONField("详情", default=dict, blank=True)
+    request_id = models.CharField("请求链路ID", max_length=64, blank=True, default="")
+    created_at = models.DateTimeField("记录时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "操作日志"
+        verbose_name_plural = "操作日志"
+        indexes = [
+            models.Index(fields=["created_at"], name="oplog_created"),
+            models.Index(fields=["module", "action"], name="oplog_mod_act"),
+            models.Index(fields=["result"], name="oplog_result"),
+            models.Index(fields=["operator_username"], name="oplog_operator"),
+            models.Index(fields=["application"], name="oplog_app"),
+            models.Index(fields=["region"], name="oplog_region"),
+        ]
+
+    def __str__(self):
+        return f"{self.created_at:%Y-%m-%d %H:%M:%S} {self.operator_username} {self.action}"
+
+
+class OperationLogArchive(models.Model):
+    """历史操作日志归档（冷数据）。"""
+
+    source_log_id = models.PositiveIntegerField("原日志ID", unique=True)
+    operator_username = models.CharField("操作账号", max_length=150, blank=True, default="")
+    operator_role = models.CharField("操作角色", max_length=50, blank=True, default="")
+    operator_region_name = models.CharField("操作地区", max_length=50, blank=True, default="")
+    module = models.CharField("模块", max_length=50)
+    action = models.CharField("动作", max_length=80)
+    target_type = models.CharField("对象类型", max_length=50, blank=True, default="")
+    target_id = models.PositiveIntegerField("对象ID", null=True, blank=True)
+    target_label = models.CharField("对象名称", max_length=200, blank=True, default="")
+    result = models.CharField("结果", max_length=20, choices=OperationLog.RESULT_CHOICES, default=OperationLog.RESULT_SUCCESS)
+    summary = models.CharField("摘要", max_length=255, blank=True, default="")
+    details = models.JSONField("详情", default=dict, blank=True)
+    request_id = models.CharField("请求链路ID", max_length=64, blank=True, default="")
+    created_at = models.DateTimeField("记录时间")
+    archived_at = models.DateTimeField("归档时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "操作日志归档"
+        verbose_name_plural = "操作日志归档"
+
+    def __str__(self):
+        return f"{self.created_at:%Y-%m-%d %H:%M:%S} {self.operator_username} {self.action}"

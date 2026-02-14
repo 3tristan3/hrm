@@ -10,8 +10,13 @@ from .views import (
     AdminInterviewCandidateDetailView,
     AdminInterviewCandidateListView,
     AdminInterviewMetaView,
+    AdminOperationLogDetailView,
+    AdminOperationLogListView,
+    AdminOperationLogMetaView,
     AdminPassedCandidateListView,
     AdminTalentPoolCandidateListView,
+    AdminTalentPoolCandidateBatchAddView,
+    AdminTalentPoolCandidateBatchToInterviewView,
     AdminInterviewCandidateResultView,
     AdminInterviewCandidateScheduleView,
     AdminJobDetailView,
@@ -83,6 +88,21 @@ urlpatterns = [
         name="admin-interview-meta",
     ),
     path(
+        "admin/operation-logs/",
+        AdminOperationLogListView.as_view(),
+        name="admin-operation-logs",
+    ),
+    path(
+        "admin/operation-logs/<int:pk>/",
+        AdminOperationLogDetailView.as_view(),
+        name="admin-operation-log-detail",
+    ),
+    path(
+        "admin/operation-logs/meta/",
+        AdminOperationLogMetaView.as_view(),
+        name="admin-operation-logs-meta",
+    ),
+    path(
         "admin/passed-candidates/",
         AdminPassedCandidateListView.as_view(),
         name="admin-passed-candidates",
@@ -91,6 +111,16 @@ urlpatterns = [
         "admin/talent-pool-candidates/",
         AdminTalentPoolCandidateListView.as_view(),
         name="admin-talent-pool-candidates",
+    ),
+    path(
+        "admin/talent-pool-candidates/batch-add/",
+        AdminTalentPoolCandidateBatchAddView.as_view(),
+        name="admin-talent-pool-candidates-batch-add",
+    ),
+    path(
+        "admin/talent-pool-candidates/batch-to-interview/",
+        AdminTalentPoolCandidateBatchToInterviewView.as_view(),
+        name="admin-talent-pool-candidates-batch-to-interview",
     ),
     path(
         "admin/interview-candidates/<int:pk>/",
