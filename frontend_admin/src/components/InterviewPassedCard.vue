@@ -5,7 +5,7 @@
     <div class="card-header interview-header">
       <div>
         <h3>{{ title }}</h3>
-        <p class="header-sub">{{ countPrefix }} {{ items.length }} 人</p>
+        <p class="header-sub">{{ countPrefix }} {{ totalCount }} 人</p>
       </div>
       <div class="applications-header-actions">
         <button class="btn btn-sm btn-default" type="button" @click="$emit('refresh')">刷新列表</button>
@@ -57,12 +57,23 @@
         </div>
         <div v-else class="empty-state">{{ emptyText }}</div>
       </div>
+      <div v-if="showPagination" class="list-pagination">
+        <div class="pagination-meta">第 {{ currentPage }} / {{ totalPages }} 页</div>
+        <div class="pagination-actions">
+          <button class="btn btn-sm btn-default" type="button" :disabled="loading || !canPrev" @click="$emit('change-page', currentPage - 1)">上一页</button>
+          <button class="btn btn-sm btn-default" type="button" :disabled="loading || !canNext" @click="$emit('change-page', currentPage + 1)">下一页</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-defineProps({
+import { computed } from "vue";
+
+defineEmits(["refresh", "change-page"]);
+
+const props = defineProps({
   items: {
     type: Array,
     default: () => [],
@@ -79,9 +90,23 @@ defineProps({
     type: String,
     default: "暂无面试通过人员",
   },
+  pagination: {
+    type: Object,
+    default: () => ({ page: 1, pageSize: 30, count: 0 }),
+  },
+  loading: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-defineEmits(["refresh"]);
+const pageSize = computed(() => Math.max(Number(props.pagination?.pageSize || 30), 1));
+const totalCount = computed(() => Math.max(Number(props.pagination?.count || props.items.length), props.items.length));
+const currentPage = computed(() => Math.max(Number(props.pagination?.page || 1), 1));
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)));
+const canPrev = computed(() => currentPage.value > 1);
+const canNext = computed(() => currentPage.value < totalPages.value);
+const showPagination = computed(() => totalCount.value > pageSize.value);
 
 // 列表内统一时间展示
 const formatTime = (value) => (value ? new Date(value).toLocaleString() : "-");

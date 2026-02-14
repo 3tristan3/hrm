@@ -1,4 +1,14 @@
 // interview API 资源层：统一面试相关接口路径与调用方式。
+const withQuery = (url, params = {}) => {
+  const search = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") return;
+    search.set(key, String(value));
+  });
+  const query = search.toString();
+  return query ? `${url}?${query}` : url;
+};
+
 export const createInterviewApi = ({ adminBase, request }) => ({
   async listCandidates() {
     return request(`${adminBase}/interview-candidates/`);
@@ -6,11 +16,11 @@ export const createInterviewApi = ({ adminBase, request }) => ({
   async getMeta() {
     return request(`${adminBase}/interview-meta/`);
   },
-  async listPassedCandidates() {
-    return request(`${adminBase}/passed-candidates/`);
+  async listPassedCandidates(params = {}) {
+    return request(withQuery(`${adminBase}/passed-candidates/`, params));
   },
-  async listTalentPoolCandidates() {
-    return request(`${adminBase}/talent-pool-candidates/`);
+  async listTalentPoolCandidates(params = {}) {
+    return request(withQuery(`${adminBase}/talent-pool-candidates/`, params));
   },
   async scheduleCandidate(id, payload) {
     return request(`${adminBase}/interview-candidates/${id}/schedule/`, {
@@ -48,4 +58,3 @@ export const createInterviewApi = ({ adminBase, request }) => ({
     });
   },
 });
-

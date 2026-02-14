@@ -1131,6 +1131,25 @@ h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
   min-height: 0;
   overflow: auto;
 }
+.list-pagination {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pagination-meta {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+.pagination-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .empty-state {
   padding: 32px;
   border-radius: 12px;

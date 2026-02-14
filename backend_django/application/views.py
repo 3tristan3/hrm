@@ -7,6 +7,7 @@ from django.db.models import Prefetch, ProtectedError
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authtoken.models import Token
 from rest_framework.request import Request
@@ -64,6 +65,14 @@ class HealthCheckView(APIView):
 
     def get(self, request: Request):
         return Response({"status": "ok"})
+
+
+class AdminResultListPagination(PageNumberPagination):
+    """面试结果池分页器：默认每页 30 条，支持前端显式指定页大小。"""
+
+    page_size = 30
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 class AdminScopedMixin:
@@ -597,6 +606,7 @@ class _InterviewOutcomeCandidateListView(_InterviewCandidateAdminQuerysetMixin, 
     """面试结果池列表基类：按最终结果筛选并输出轮次快照。"""
 
     serializer_class = InterviewPassedCandidateListSerializer
+    pagination_class = AdminResultListPagination
     outcome_result: str = ""
 
     def get_queryset(self):
@@ -610,6 +620,14 @@ class _InterviewOutcomeCandidateListView(_InterviewCandidateAdminQuerysetMixin, 
                 queryset=InterviewRoundRecord.objects.order_by("round_no", "id"),
             )
         ).order_by("-result_at", "-updated_at", "-id")
+
+    def list(self, request: Request, *args, **kwargs):
+        """兼容历史返回：仅当前端传 page/page_size 时启用分页结构。"""
+        if "page" not in request.query_params and "page_size" not in request.query_params:
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        return super().list(request, *args, **kwargs)
 
 
 class AdminPassedCandidateListView(_InterviewOutcomeCandidateListView):

@@ -110,3 +110,27 @@ class InterviewMetaApiTests(APITestCase):
         payload = response.json()
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]["id"], reject_candidate.id)
+
+    def test_talent_pool_supports_paginated_response_when_requested(self):
+        self._create_candidate(
+            "淘汰候选人A",
+            "13800004441",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_REJECT,
+        )
+        self._create_candidate(
+            "淘汰候选人B",
+            "13800004442",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_REJECT,
+        )
+
+        response = self.client.get(
+            f"{reverse('admin-talent-pool-candidates')}?page=1&page_size=1"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("count", payload)
+        self.assertIn("results", payload)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(len(payload["results"]), 1)

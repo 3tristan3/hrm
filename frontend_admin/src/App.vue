@@ -394,7 +394,7 @@
                         @keydown.space.prevent="toggleApplicationSelection(item.id)"
                       >
                         <div class="card-photo">
-                          <img v-if="item.photo_url" :src="resolveMediaUrl(item.photo_url)" alt="个人照片" />
+                          <img v-if="item.photo_url" :src="resolveMediaUrl(item.photo_url)" alt="个人照片" loading="lazy" decoding="async" />
                           <div v-else class="photo-fallback">{{ item.name ? item.name.slice(0, 1) : "?" }}</div>
                           <span class="card-select-indicator" :class="{ active: isApplicationSelected(item.id) }">
                             <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="3" fill="none">
@@ -494,7 +494,10 @@
           title="面试通过人员"
           count-prefix="已通过"
           empty-text="暂无面试通过人员"
+          :pagination="passedPagination"
+          :loading="dataLoading.passed"
           @refresh="refreshPassedCandidates"
+          @change-page="changePassedPage"
         />
 
         <InterviewPassedCard
@@ -503,7 +506,10 @@
           title="人才库"
           count-prefix="已入库"
           empty-text="暂无人才库人员"
+          :pagination="talentPagination"
+          :loading="dataLoading.talent"
           @refresh="refreshTalentPoolCandidates"
+          @change-page="changeTalentPage"
         />
 
         <div v-else class="card">
@@ -518,7 +524,7 @@
         <div class="detail-header">
           <div class="detail-header-left">
             <div class="detail-photo">
-              <img v-if="activeApplication.photo_url" :src="resolveMediaUrl(activeApplication.photo_url)" alt="个人照片" />
+              <img v-if="activeApplication.photo_url" :src="resolveMediaUrl(activeApplication.photo_url)" alt="个人照片" loading="lazy" decoding="async" />
               <div v-else class="photo-fallback">{{ activeApplication.name ? activeApplication.name.slice(0, 1) : "?" }}</div>
             </div>
             <div>
@@ -578,6 +584,8 @@
                       v-if="card.url && card.isImage"
                       :src="resolveMediaUrl(card.url)"
                       :alt="`${card.label}预览`"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <span v-else>{{ card.previewTag }}</span>
                   </span>
@@ -745,6 +753,37 @@ const createInterviewMeta = (payload = {}) => {
   };
 };
 
+const LIST_PAGE_SIZE = 30;
+const createPageState = () => ({
+  page: 1,
+  pageSize: LIST_PAGE_SIZE,
+  count: 0,
+  next: "",
+  previous: "",
+});
+const isPaginatedPayload = (payload) =>
+  Boolean(payload && typeof payload === "object" && Array.isArray(payload.results));
+const applyListPagePayload = (state, payload, requestedPage = 1) => {
+  if (isPaginatedPayload(payload)) {
+    state.page = Math.max(Number(requestedPage || 1), 1);
+    state.count = Number(payload.count || 0);
+    state.next = payload.next || "";
+    state.previous = payload.previous || "";
+    return payload.results;
+  }
+  state.page = 1;
+  state.count = Array.isArray(payload) ? payload.length : 0;
+  state.next = "";
+  state.previous = "";
+  return Array.isArray(payload) ? payload : [];
+};
+const resetPageState = (state) => {
+  state.page = 1;
+  state.count = 0;
+  state.next = "";
+  state.previous = "";
+};
+
 // === 状态管理 ===
 const token = ref(localStorage.getItem("admin_token") || "");
 const currentUsername = ref(localStorage.getItem("admin_username") || "");
@@ -803,6 +842,8 @@ const applications = ref([]);
 const interviewCandidates = ref([]);
 const passedCandidates = ref([]);
 const talentPoolCandidates = ref([]);
+const passedPagination = reactive(createPageState());
+const talentPagination = reactive(createPageState());
 const interviewMeta = reactive(createInterviewMeta());
 const users = ref([]);
 const userProfile = reactive({ can_view_all: false, region_name: "", region_id: null, is_superuser: false });
@@ -1096,13 +1137,17 @@ const loadInterviewMeta = async (force = false) => {
   }
 };
 
-const loadPassedCandidates = async (force = false) => {
+const loadPassedCandidates = async (force = false, page = passedPagination.page) => {
   // 拉取面试通过人员（含多轮历史快照）
   if (dataLoading.passed) return;
-  if (!force && dataLoaded.passed) return;
+  if (!force && dataLoaded.passed && page === passedPagination.page) return;
   dataLoading.passed = true;
   try {
-    passedCandidates.value = await interviewApi.listPassedCandidates();
+    const payload = await interviewApi.listPassedCandidates({
+      page,
+      page_size: passedPagination.pageSize,
+    });
+    passedCandidates.value = applyListPagePayload(passedPagination, payload, page);
     dataLoaded.passed = true;
   } catch (err) {
     notifyError(err);
@@ -1111,13 +1156,17 @@ const loadPassedCandidates = async (force = false) => {
   }
 };
 
-const loadTalentPoolCandidates = async (force = false) => {
+const loadTalentPoolCandidates = async (force = false, page = talentPagination.page) => {
   // 拉取人才库（面试淘汰人员，含多轮历史快照）
   if (dataLoading.talent) return;
-  if (!force && dataLoaded.talent) return;
+  if (!force && dataLoaded.talent && page === talentPagination.page) return;
   dataLoading.talent = true;
   try {
-    talentPoolCandidates.value = await interviewApi.listTalentPoolCandidates();
+    const payload = await interviewApi.listTalentPoolCandidates({
+      page,
+      page_size: talentPagination.pageSize,
+    });
+    talentPoolCandidates.value = applyListPagePayload(talentPagination, payload, page);
     dataLoaded.talent = true;
   } catch (err) {
     notifyError(err);
@@ -1214,6 +1263,8 @@ const submitAuth = async () => {
     dataLoaded.talent = false;
     dataLoaded.interviewMeta = false;
     dataLoaded.users = false;
+    resetPageState(passedPagination);
+    resetPageState(talentPagination);
 
     notifySuccess("登录成功");
     await loadProfile();
@@ -1263,6 +1314,8 @@ const logout = async (silent = false) => {
     dataLoading.talent = false;
     dataLoading.interviewMeta = false;
     dataLoading.users = false;
+    resetPageState(passedPagination);
+    resetPageState(talentPagination);
     Object.assign(interviewMeta, createInterviewMeta());
     activeApplication.value = null;
     applicationDetailLoading.value = false;
@@ -1805,13 +1858,25 @@ const refreshInterviewCandidates = async () => {
   notifySuccess("拟面试人员列表已刷新");
 };
 
+const changePassedPage = async (nextPage) => {
+  const page = Math.max(Number(nextPage || 1), 1);
+  if (page === passedPagination.page) return;
+  await loadPassedCandidates(true, page);
+};
+
+const changeTalentPage = async (nextPage) => {
+  const page = Math.max(Number(nextPage || 1), 1);
+  if (page === talentPagination.page) return;
+  await loadTalentPoolCandidates(true, page);
+};
+
 const refreshPassedCandidates = async () => {
-  await loadPassedCandidates(true);
+  await loadPassedCandidates(true, 1);
   notifySuccess("面试通过人员列表已刷新");
 };
 
 const refreshTalentPoolCandidates = async () => {
-  await loadTalentPoolCandidates(true);
+  await loadTalentPoolCandidates(true, 1);
   notifySuccess("人才库列表已刷新");
 };
 
