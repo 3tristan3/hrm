@@ -1,0 +1,247 @@
+/* 管理后台全局样式：定义主题变量、布局骨架与通用组件风格。 */
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --primary: #1D4ED8;
+  --primary-dark: #1E40AF;
+  --secondary: #3B82F6;
+  --cta: #2563EB;
+  --bg-body: #F8FAFC;
+  --bg-card: #ffffff;
+  --text-main: #0F172A;
+  --text-sub: #475569;
+  --border-color: #E2E8F0;
+  --sidebar-bg: #0F172A;
+  --sidebar-text: #E2E8F0;
+  --sidebar-muted: #94A3B8;
+  --sidebar-width: 240px;
+  --header-height: 60px;
+}
+body {
+  margin: 0;
+  font-family: "Fira Sans", "Segoe UI", sans-serif;
+  font-size: 15px;
+  background: var(--bg-body);
+  color: var(--text-main);
+}
+*, *::before, *::after { box-sizing: border-box; }
+a { text-decoration: none; color: inherit; }
+h1, h2, h3, .page-title, .card-header h3, .auth-header h1, .detail-title {
+  font-family: "Fira Code", "Fira Sans", sans-serif;
+  letter-spacing: -0.2px;
+}
+
+/* 登录/注册页 */
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-body);
+  padding: 40px 16px;
+}
+.auth-box {
+  width: 420px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+  padding: 32px 36px;
+}
+.auth-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.auth-header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.logo-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 6px 16px rgba(29,78,216,0.35);
+}
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #E2E8F0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.tab-item {
+  padding: 10px 0;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: 0.2s;
+}
+.tab-item.active {
+  color: var(--primary);
+  background: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.form-item input,
+.form-item select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  font-size: 15px;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-item input:focus,
+.form-item select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(29,78,216,0.14);
+}
+.auth-footer {
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+/* 后台布局 */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  min-width: 0;
+  overflow: hidden;
+}
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  max-width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+}
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 20px 16px;
+}
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(14,165,233,0.35);
+}
+.app-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--sidebar-text);
+}
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.18);
+  border-radius: 999px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nav-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  color: var(--sidebar-muted);
+  cursor: pointer;
+  transition: 0.2s;
+}
+.nav-item:hover {
+  background: rgba(255,255,255,0.12);
+  color: var(--sidebar-text);
+}
+.nav-item.active {
+  background: rgba(14,165,233,0.22);
+  color: var(--sidebar-text);
+  font-weight: 600;
+}
+.sidebar-footer {
+  padding: 16px 20px 22px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  background: var(--sidebar-bg);
+}
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.info-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.username {
+  font-size: 15px;
+  color: var(--sidebar-text);
+}
+.role-badge {
+  font-size: 13px;
+  color: var(--sidebar-muted);
+}
+.logout-btn {
+  border: none;
+  background: transparent;
+  color: var(--sidebar-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+}

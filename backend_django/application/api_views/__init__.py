@@ -1,0 +1,63 @@
+"""application 视图拆分包：对外导出与旧 views.py 等价的符号。"""
+
+from .shared import HealthCheckView, AdminResultListPagination, OperationLogCursorPagination, AdminScopedMixin
+from .public import RegionListView, JobListView, JobDetailView, ApplicationCreateView, ApplicationSubmitView, MockOAView, ApplicationTokenAccessMixin, ApplicationAttachmentListCreateView, ApplicationDiscardView
+from .auth import RegisterView, LoginView, MeView, AdminUserListView, AdminUserPasswordView, AdminUserDetailView, ChangePasswordView, LogoutView
+from .admin_regions_jobs import _RegionAdminQuerysetMixin, AdminRegionListView, AdminRegionDetailView, AdminRegionFieldListView, AdminRegionFieldDetailView, AdminJobListView, AdminJobDetailView, AdminJobBatchStatusView
+from .admin_applications import _ApplicationAdminQuerysetMixin, AdminApplicationListView, AdminApplicationDetailView
+from .admin_logs import operation_log_base_queryset, AdminOperationLogListView, AdminOperationLogDetailView, AdminOperationLogMetaView
+from .admin_interviews import _InterviewCandidateAdminQuerysetMixin, AdminInterviewCandidateListView, AdminInterviewMetaView, _InterviewOutcomeCandidateListView, AdminPassedCandidateListView, AdminTalentPoolCandidateListView, AdminInterviewCandidateDetailView, AdminInterviewCandidateScheduleView, AdminInterviewCandidateCancelScheduleView, AdminInterviewCandidateResultView, AdminInterviewCandidateBatchAddView, AdminInterviewCandidateBatchRemoveView, AdminTalentPoolCandidateBatchAddView, AdminTalentPoolCandidateBatchToInterviewView, AdminPassedCandidateBatchConfirmHireView
+
+__all__ = [
+    "HealthCheckView",
+    "AdminResultListPagination",
+    "OperationLogCursorPagination",
+    "AdminScopedMixin",
+    "RegionListView",
+    "JobListView",
+    "JobDetailView",
+    "ApplicationCreateView",
+    "ApplicationSubmitView",
+    "MockOAView",
+    "ApplicationTokenAccessMixin",
+    "ApplicationAttachmentListCreateView",
+    "ApplicationDiscardView",
+    "RegisterView",
+    "LoginView",
+    "MeView",
+    "AdminUserListView",
+    "AdminUserPasswordView",
+    "AdminUserDetailView",
+    "ChangePasswordView",
+    "LogoutView",
+    "_RegionAdminQuerysetMixin",
+    "AdminRegionListView",
+    "AdminRegionDetailView",
+    "AdminRegionFieldListView",
+    "AdminRegionFieldDetailView",
+    "AdminJobListView",
+    "AdminJobDetailView",
+    "AdminJobBatchStatusView",
+    "_ApplicationAdminQuerysetMixin",
+    "AdminApplicationListView",
+    "AdminApplicationDetailView",
+    "operation_log_base_queryset",
+    "AdminOperationLogListView",
+    "AdminOperationLogDetailView",
+    "AdminOperationLogMetaView",
+    "_InterviewCandidateAdminQuerysetMixin",
+    "AdminInterviewCandidateListView",
+    "AdminInterviewMetaView",
+    "_InterviewOutcomeCandidateListView",
+    "AdminPassedCandidateListView",
+    "AdminTalentPoolCandidateListView",
+    "AdminInterviewCandidateDetailView",
+    "AdminInterviewCandidateScheduleView",
+    "AdminInterviewCandidateCancelScheduleView",
+    "AdminInterviewCandidateResultView",
+    "AdminInterviewCandidateBatchAddView",
+    "AdminInterviewCandidateBatchRemoveView",
+    "AdminTalentPoolCandidateBatchAddView",
+    "AdminTalentPoolCandidateBatchToInterviewView",
+    "AdminPassedCandidateBatchConfirmHireView",
+]

@@ -1,0 +1,113 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hrm}
+      MYSQL_USER: ${MYSQL_USER:-hrm_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hrm_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend_django
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      DEBUG: ${DEBUG:-False}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080,http://localhost:8090}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://localhost:8090}
+      DB_ENGINE: mysql
+      DB_NAME: ${MYSQL_DATABASE:-hrm}
+      DB_USER: ${MYSQL_USER:-hrm_user}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-hrm_password}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_CHARSET: ${DB_CHARSET:-utf8mb4}
+      DB_CONN_MAX_AGE: ${DB_CONN_MAX_AGE:-60}
+      USE_X_FORWARDED_PROTO: ${USE_X_FORWARDED_PROTO:-True}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
+      AUTO_CREATE_ADMIN: ${AUTO_CREATE_ADMIN:-True}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-xxb-88809}
+      ADMIN_REGION_CODE: ${ADMIN_REGION_CODE:-beijing}
+      ADMIN_REGION_NAME: ${ADMIN_REGION_NAME:-北京总部}
+      ADMIN_CAN_VIEW_ALL: ${ADMIN_CAN_VIEW_ALL:-True}
+      ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-True}
+      OA_API_URL: ${OA_API_URL:-}
+      OA_WORKFLOW_ID: ${OA_WORKFLOW_ID:-}
+      OA_CREATOR_ID: ${OA_CREATOR_ID:-}
+      OA_REQUEST_TIMEOUT: ${OA_REQUEST_TIMEOUT:-10}
+      OA_REQUEST_NAME_TEMPLATE: ${OA_REQUEST_NAME_TEMPLATE:-}
+      OA_FIELD_MAPPING: ${OA_FIELD_MAPPING:-}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-3}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  web_apply:
+    build:
+      context: ./frontend_vue
+      args:
+        VITE_API_BASE: ${APPLY_VITE_API_BASE:-}
+        VITE_FORM_URL: ${APPLY_VITE_FORM_URL:-}
+        VITE_PREWARM_JOBS: ${APPLY_VITE_PREWARM_JOBS:-true}
+        VITE_PREWARM_REGION_LIMIT: ${APPLY_VITE_PREWARM_REGION_LIMIT:-3}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - media_data:/var/www/media:ro
+      - static_data:/var/www/static:ro
+    ports:
+      - "${APPLY_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web_admin:
+    build:
+      context: ./frontend_admin
+      args:
+        VITE_API_BASE: ${ADMIN_VITE_API_BASE:-}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - media_data:/var/www/media:ro
+      - static_data:/var/www/static:ro
+    ports:
+      - "${ADMIN_PORT:-8090}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+  media_data:
+  static_data:

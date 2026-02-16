@@ -1,0 +1,48 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*.pyd
+*.log
+.pytest_cache/
+.mypy_cache/
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
+*.coverage
+coverage.xml
+htmlcov/
+/.venv/
+**/.venv/
+/venv/
+**/venv/
+backend_django/media/
+backend_django/staticfiles/
+backend_django/.env
+
+# Codex
+.codex/
+.tmp-edge-profile/
+
+# Node / Vite
+**/node_modules/
+**/dist/
+**/.vite/
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/pnpm-debug.log*
+
+# Local env overrides
+frontend_vue/.env.local
+frontend_admin/.env.local
+.env.docker
+
+# Local docs (do not upload)
+/*.md
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+start_all.ps1

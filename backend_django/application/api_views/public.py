@@ -1,0 +1,204 @@
+"""按职责拆分的视图模块。"""
+from .shared import *
+
+class RegionListView(APIView):
+    def get(self, request: Request):
+        queryset = Region.objects.filter(is_active=True).prefetch_related("fields")
+        serializer = RegionSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+class JobListView(APIView):
+    def get(self, request: Request):
+        queryset = Job.objects.filter(is_active=True, is_deleted=False)
+        region_id = request.query_params.get("region_id")
+        if region_id:
+            queryset = queryset.filter(region_id=region_id)
+        serializer = JobSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+class JobDetailView(APIView):
+    def get(self, request: Request, pk: int):
+        job = get_object_or_404(Job, pk=pk, is_active=True, is_deleted=False)
+        serializer = JobSerializer(job)
+        return Response(serializer.data)
+
+class ApplicationCreateView(APIView):
+    def _coerce_payload(self, data):
+        payload = data.copy() if hasattr(data, "copy") else dict(data)
+        for key in ("education_history", "work_history", "family_members", "extra_fields"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                try:
+                    payload[key] = json.loads(value)
+                except json.JSONDecodeError:
+                    pass
+        for key in ("available_date", "birth_month", "graduation_date"):
+            if payload.get(key) == "":
+                payload[key] = None
+        return payload
+
+    def post(self, request: Request):
+        payload = self._coerce_payload(request.data)
+        serializer = ApplicationCreateSerializer(data=payload)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = serializer.validated_data
+        # region / job 由 validate() 写入，region_id / job_id 是序列化器字段不需要
+        create_kwargs = {k: v for k, v in data.items() if k not in ("region_id", "job_id")}
+        application = Application.objects.create(**create_kwargs)
+
+        return Response(
+            {
+                "message": "提交成功",
+                "applicationId": application.pk,
+                "attachmentToken": application.attachment_token,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+class ApplicationSubmitView(ApplicationCreateView):
+    pass
+
+class MockOAView(APIView):
+    def post(self, request: Request):
+        payload = request.data
+        return Response(
+            {
+                "requestId": "MOCK-REQUEST-001",
+                "received": payload,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+class ApplicationTokenAccessMixin:
+    authentication_classes = [ExpiringTokenAuthentication]
+    permission_classes = [AllowAny]
+
+    @staticmethod
+    def _not_found_response():
+        return Response({"error": "记录不存在"}, status=status.HTTP_404_NOT_FOUND)
+
+    @staticmethod
+    def _is_admin_request(request: Request) -> bool:
+        user = getattr(request, "user", None)
+        return bool(user and user.is_authenticated)
+
+    @staticmethod
+    def _extract_token(request: Request):
+        header_value = (request.headers.get(ATTACHMENT_TOKEN_HEADER) or "").strip()
+        if header_value:
+            return header_value
+        query_value = (request.query_params.get("token") or "").strip()
+        if query_value:
+            return query_value
+        data_value = (request.data.get("attachment_token") or "").strip() if hasattr(request, "data") else ""
+        return data_value
+
+    def _has_valid_token(self, request: Request, application: Application) -> bool:
+        token = self._extract_token(request)
+        if not token:
+            return False
+        return constant_time_compare(str(application.attachment_token), token)
+
+    def _resolve_accessible_application(self, request: Request, pk: int):
+        application = get_object_or_404(Application, pk=pk)
+        if self._is_admin_request(request) or self._has_valid_token(request, application):
+            return application
+        return None
+
+class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
+    def get(self, request: Request, pk: int):
+        application = self._resolve_accessible_application(request, pk)
+        if not application:
+            return self._not_found_response()
+        serializer = ApplicationAttachmentSerializer(
+            application.attachments.all(), many=True, context={"request": request}
+        )
+        return Response(serializer.data)
+
+    def post(self, request: Request, pk: int):
+        application = self._resolve_accessible_application(request, pk)
+        if not application:
+            return self._not_found_response()
+        serializer = ApplicationAttachmentUploadSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        category = serializer.validated_data["category"]
+        files = request.FILES.getlist("file")
+        if not files:
+            return Response(
+                {"error": "未上传文件"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if category != "other" and len(files) > 1:
+            return Response(
+                {"error": "该附件类型仅支持上传单个文件"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        max_file_mb, max_total_mb, max_file_bytes, max_total_bytes = _resolve_attachment_limits()
+        oversized_files = [upload.name for upload in files if _safe_file_size(upload) > max_file_bytes]
+        if oversized_files:
+            return Response(
+                {
+                    "error": f"单个文件不能超过{max_file_mb}MB",
+                    "details": {"file": [f"超出大小限制: {name}" for name in oversized_files]},
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        incoming_total_bytes = sum(_safe_file_size(upload) for upload in files)
+        existing_attachments = list(application.attachments.all())
+        existing_total_bytes = sum(_safe_file_size(item.file) for item in existing_attachments)
+        replaced_bytes = 0
+        if category != "other":
+            replaced_bytes = sum(
+                _safe_file_size(item.file) for item in existing_attachments if item.category == category
+            )
+        projected_total_bytes = max(existing_total_bytes - replaced_bytes, 0) + incoming_total_bytes
+        if projected_total_bytes > max_total_bytes:
+            return Response(
+                {"error": f"附件总大小不能超过{max_total_mb}MB"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if category != "other":
+            ApplicationAttachment.objects.filter(
+                application=application, category=category
+            ).delete()
+        attachments = [
+            ApplicationAttachment.objects.create(
+                application=application, category=category, file=upload
+            )
+            for upload in files
+        ]
+        output = ApplicationAttachmentSerializer(
+            attachments, many=True, context={"request": request}
+        )
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+class ApplicationDiscardView(ApplicationTokenAccessMixin, APIView):
+    def post(self, request: Request, pk: int):
+        application = self._resolve_accessible_application(request, pk)
+        if not application:
+            return self._not_found_response()
+        if hasattr(application, "interview_candidate"):
+            return Response(
+                {"error": "记录已进入面试流程，无法撤销"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            for item in application.attachments.all():
+                try:
+                    item.file.delete(save=False)
+                except Exception:
+                    pass
+            application.delete()
+        return Response({"message": "草稿已撤销"})
