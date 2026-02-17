@@ -2,6 +2,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
+from application.default_regions import ensure_default_regions
 from application.models import (
     Application,
     ApplicationAttachment,
@@ -16,25 +17,9 @@ class Command(BaseCommand):
     help = "Reset application data and seed fixed regions."
 
     def handle(self, *args, **options):
-        fixed_regions = [
-            {"name": "北京总部", "code": "beijing", "order": 1},
-            {"name": "东营管理区", "code": "dongying", "order": 2},
-            {"name": "聊城管理区", "code": "liaocheng", "order": 3},
-        ]
-
         with transaction.atomic():
             # Ensure fixed regions exist first (for profile reassignment).
-            region_map = {}
-            for item in fixed_regions:
-                region, _ = Region.objects.update_or_create(
-                    code=item["code"],
-                    defaults={
-                        "name": item["name"],
-                        "is_active": True,
-                        "order": item["order"],
-                    },
-                )
-                region_map[item["code"]] = region
+            region_map = ensure_default_regions()
 
             default_region = region_map["beijing"]
 

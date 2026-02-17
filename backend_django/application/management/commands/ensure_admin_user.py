@@ -4,6 +4,7 @@ import os
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
+from application.default_regions import DEFAULT_REGIONS
 from application.models import Region, UserProfile
 
 
@@ -28,8 +29,10 @@ class Command(BaseCommand):
             self.stdout.write("ADMIN_PASSWORD is empty; skipping admin bootstrap.")
             return
 
+        default_region_name_map = {item["code"]: item["name"] for item in DEFAULT_REGIONS}
         region_code = os.getenv("ADMIN_REGION_CODE", "beijing").strip() or "beijing"
-        region_name = os.getenv("ADMIN_REGION_NAME", "北京总部").strip() or "北京总部"
+        default_region_name = default_region_name_map.get(region_code, "北京总部")
+        region_name = os.getenv("ADMIN_REGION_NAME", default_region_name).strip() or default_region_name
         can_view_all = env_bool("ADMIN_CAN_VIEW_ALL", True)
         reset_password = env_bool("ADMIN_RESET_PASSWORD", True)
 

@@ -60,6 +60,11 @@ export const useAdminAppPage = () => {
 
   const authForm = reactive({ username: "", password: "", region_id: "" });
   const jobForm = reactive({ id: null, region: "", title: "", description: "", salary: "", education: "", order: 0, is_active: true });
+  const regionForm = reactive({ name: "", code: "", order: 0, is_active: true });
+  const showRegionDeleteModal = ref(false);
+  const regionDeleteSubmitting = ref(false);
+  const regionDeletePassword = ref("");
+  const pendingDeleteRegion = ref(null);
   const passwordForm = reactive({ user_id: "", password: "" });
   const selfPasswordForm = reactive({ old_password: "", new_password: "", confirm_password: "" });
   const selectedJobIds = ref([]);
@@ -360,6 +365,78 @@ export const useAdminAppPage = () => {
   const scheduleActionLabel = (item) => {
     if (!canScheduleInterview(item)) return "不可安排";
     return item.interview_at ? "改期安排" : "安排面试";
+  };
+
+  // 地区
+  const resetRegionForm = () => {
+    Object.assign(regionForm, { name: "", code: "", order: 0, is_active: true });
+  };
+  const saveRegion = async () => {
+    const payload = {
+      name: regionForm.name.trim(),
+      code: regionForm.code.trim(),
+      order: Number.isFinite(Number(regionForm.order)) ? Number(regionForm.order) : 0,
+      is_active: Boolean(regionForm.is_active),
+    };
+    if (!payload.name || !payload.code) {
+      toastRef.value?.show("请填写地区名称和地区编码", "error");
+      return;
+    }
+    try {
+      await request(`${adminBase}/regions/`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      notifySuccess("地区已新增");
+      resetRegionForm();
+      await loadRegions(true);
+      if (dataLoaded.jobs) {
+        await loadJobs(true);
+      }
+      publicRegions.value = [];
+      await fetchPublicRegions();
+    } catch (err) {
+      notifyError(err);
+    }
+  };
+  const openDeleteRegionModal = (item) => {
+    pendingDeleteRegion.value = item;
+    regionDeletePassword.value = "";
+    regionDeleteSubmitting.value = false;
+    showRegionDeleteModal.value = true;
+  };
+  const closeDeleteRegionModal = () => {
+    showRegionDeleteModal.value = false;
+    regionDeleteSubmitting.value = false;
+    regionDeletePassword.value = "";
+    pendingDeleteRegion.value = null;
+  };
+  const confirmDeleteRegion = async () => {
+    const target = pendingDeleteRegion.value;
+    if (!target) return;
+    if (!regionDeletePassword.value.trim()) {
+      toastRef.value?.show("请输入当前登录密码", "error");
+      return;
+    }
+    regionDeleteSubmitting.value = true;
+    try {
+      await request(`${adminBase}/regions/${target.id}/`, {
+        method: "DELETE",
+        body: JSON.stringify({ password: regionDeletePassword.value }),
+      });
+      notifySuccess("地区已删除");
+      closeDeleteRegionModal();
+      await loadRegions(true);
+      if (dataLoaded.jobs) {
+        await loadJobs(true);
+      }
+      publicRegions.value = [];
+      await fetchPublicRegions();
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      regionDeleteSubmitting.value = false;
+    }
   };
 
   // 岗位
@@ -887,6 +964,11 @@ export const useAdminAppPage = () => {
     tabs,
     authForm,
     jobForm,
+    regionForm,
+    showRegionDeleteModal,
+    regionDeleteSubmitting,
+    regionDeletePassword,
+    pendingDeleteRegion,
     passwordForm,
     selfPasswordForm,
     selectedJobIds,
@@ -1000,6 +1082,11 @@ export const useAdminAppPage = () => {
     formatTime,
     canScheduleInterview,
     scheduleActionLabel,
+    resetRegionForm,
+    saveRegion,
+    openDeleteRegionModal,
+    closeDeleteRegionModal,
+    confirmDeleteRegion,
     resetJobForm,
     openNewJob,
     closeJobForm,

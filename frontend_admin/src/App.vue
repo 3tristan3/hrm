@@ -81,33 +81,88 @@
 
       <div class="content-body">
         
-        <!-- 地区管理（只读） -->
-        <div v-if="activeTab === 'regions'" class="card">
-          <div class="card-header">
-            <h3>地区列表（固定）</h3>
+        <!-- 地区管理 -->
+        <div v-if="activeTab === 'regions'" class="card region-card">
+          <div class="card-header region-header">
+            <div>
+              <h3>地区管理</h3>
+              <p class="header-sub">仅系统管理员可新增或删除地区，删除需输入密码二次确认</p>
+            </div>
+            <div class="header-actions">
+              <span class="chip">{{ regions.length }} 个地区</span>
+            </div>
           </div>
-          <div class="card-body">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>名称</th>
-                  <th>编码</th>
-                  <th>排序</th>
-                  <th>状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in regions" :key="item.id">
-                  <td>{{ item.name }}</td>
-                  <td>{{ item.code }}</td>
-                  <td>{{ item.order }}</td>
-                  <td>
-                    <span class="status-dot" :class="{ active: item.is_active }"></span>
-                    {{ item.is_active ? "启用" : "停用" }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="card-body region-body">
+            <div class="region-create-panel">
+              <div class="panel-title">
+                <div>
+                  <h4>新增地区</h4>
+                  <p>填写地区基础信息并保存</p>
+                </div>
+                <span class="panel-pill">管理员操作</span>
+              </div>
+              <form class="form-compact" @submit.prevent="saveRegion">
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label>地区名称</label>
+                    <input v-model.trim="regionForm.name" placeholder="如：华东地区" required />
+                  </div>
+                  <div class="form-group">
+                    <label>地区编码</label>
+                    <input v-model.trim="regionForm.code" placeholder="如：east" required />
+                  </div>
+                </div>
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label>排序</label>
+                    <input v-model.number="regionForm.order" type="number" />
+                  </div>
+                  <div class="form-group">
+                    <label>状态</label>
+                    <select v-model="regionForm.is_active">
+                      <option :value="true">启用</option>
+                      <option :value="false">停用</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-actions right">
+                  <button type="button" class="btn btn-default" @click="resetRegionForm">重置</button>
+                  <button type="submit" class="btn btn-primary">新增地区</button>
+                </div>
+              </form>
+            </div>
+            <div class="region-table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>编码</th>
+                    <th>排序</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in regions" :key="item.id">
+                    <td class="font-medium">{{ item.name }}</td>
+                    <td>{{ item.code }}</td>
+                    <td>{{ item.order }}</td>
+                    <td>
+                      <span class="status-dot" :class="{ active: item.is_active }"></span>
+                      {{ item.is_active ? "启用" : "停用" }}
+                    </td>
+                    <td>
+                      <button class="btn btn-xs btn-danger" type="button" @click="openDeleteRegionModal(item)">
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="!regions.length">
+                    <td colspan="5" class="text-muted">暂无地区数据</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -845,6 +900,50 @@
       </div>
     </div>
 
+    <div v-if="showRegionDeleteModal" class="job-modal-overlay" @click.self="closeDeleteRegionModal">
+      <div class="region-delete-modal">
+        <div class="job-modal-header">
+          <div>
+            <div class="job-modal-title">删除地区</div>
+            <div class="job-modal-subtitle">
+              即将删除：{{ pendingDeleteRegion?.name || "-" }}（{{ pendingDeleteRegion?.code || "-" }}）
+            </div>
+          </div>
+          <button class="job-modal-close" type="button" @click="closeDeleteRegionModal" title="关闭">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="job-modal-body">
+          <p class="text-muted region-delete-note">
+            此操作不可恢复，请输入当前登录密码进行二次确认。
+          </p>
+          <div class="form-group">
+            <label>当前登录密码</label>
+            <input
+              v-model="regionDeletePassword"
+              type="password"
+              placeholder="请输入当前登录密码"
+              @keyup.enter="confirmDeleteRegion"
+            />
+          </div>
+          <div class="form-actions right">
+            <button class="btn btn-default" type="button" @click="closeDeleteRegionModal">取消</button>
+            <button
+              class="btn btn-danger"
+              type="button"
+              :disabled="regionDeleteSubmitting || !regionDeletePassword.trim()"
+              @click="confirmDeleteRegion"
+            >
+              {{ regionDeleteSubmitting ? "删除中..." : "确认删除" }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showJobForm" class="job-modal-overlay" @click.self="closeJobForm">
       <div class="job-modal">
         <div class="job-modal-header">
@@ -944,6 +1043,11 @@ const {
   tabs,
   authForm,
   jobForm,
+  regionForm,
+  showRegionDeleteModal,
+  regionDeleteSubmitting,
+  regionDeletePassword,
+  pendingDeleteRegion,
   passwordForm,
   selfPasswordForm,
   selectedJobIds,
@@ -1057,6 +1161,11 @@ const {
   formatTime,
   canScheduleInterview,
   scheduleActionLabel,
+  resetRegionForm,
+  saveRegion,
+  openDeleteRegionModal,
+  closeDeleteRegionModal,
+  confirmDeleteRegion,
   resetJobForm,
   openNewJob,
   closeJobForm,

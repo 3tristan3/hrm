@@ -4,6 +4,7 @@ const FALLBACK_OPERATION_MODULE_LABELS = Object.freeze({
   interviews: "拟面试",
   talent: "人才库",
   jobs: "岗位管理",
+  regions: "地区管理",
   accounts: "账号管理",
 });
 
@@ -23,6 +24,8 @@ const FALLBACK_OPERATION_ACTION_LABELS = Object.freeze({
   CONFIRM_HIRE: "确认入职",
   BATCH_CONFIRM_HIRE: "批量确认入职",
   DELETE_JOB: "删除岗位",
+  CREATE_REGION: "新增地区",
+  DELETE_REGION: "删除地区",
   BATCH_DEACTIVATE_JOB: "批量下架岗位",
   BATCH_ACTIVATE_JOB: "批量上架岗位",
   BATCH_DELETE_JOB: "批量删除岗位",

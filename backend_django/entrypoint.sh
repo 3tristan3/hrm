@@ -4,6 +4,9 @@ set -eu
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 
+echo "Ensuring default regions..."
+python manage.py ensure_default_regions
+
 echo "Ensuring admin account..."
 python manage.py ensure_admin_user
 

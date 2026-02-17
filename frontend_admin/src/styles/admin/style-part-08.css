@@ -189,6 +189,7 @@
     max-width: none;
   }
   .job-modal { width: 100%; }
+  .region-delete-modal { width: 100%; }
   .application-toolbar { flex-direction: column; align-items: stretch; }
   .op-header { flex-direction: column; }
   .op-header-metrics { width: 100%; justify-content: flex-start; }

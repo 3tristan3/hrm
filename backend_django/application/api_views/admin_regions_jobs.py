@@ -14,10 +14,37 @@ class _RegionAdminQuerysetMixin(AdminScopedMixin):
 class AdminRegionListView(_RegionAdminQuerysetMixin, generics.ListCreateAPIView):
 
     def create(self, request: Request, *args, **kwargs):
-        return Response(
-            {"error": "地区为系统固定配置，无法新增"},
-            status=status.HTTP_403_FORBIDDEN,
+        if not request.user.is_superuser:
+            return Response({"error": "仅系统管理员可新增地区"}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        self.perform_create(serializer)
+        target_region = serializer.instance
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="regions",
+            action="CREATE_REGION",
+            target_type="region",
+            target_id=target_region.id,
+            target_label=target_region.name,
+            summary=f"新增地区：{target_region.name}",
+            details={
+                "region_id": target_region.id,
+                "name": target_region.name,
+                "code": target_region.code,
+                "is_active": target_region.is_active,
+                "order": target_region.order,
+            },
+            region=target_region,
         )
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 class AdminRegionDetailView(_RegionAdminQuerysetMixin, generics.RetrieveUpdateDestroyAPIView):
 
@@ -28,10 +55,53 @@ class AdminRegionDetailView(_RegionAdminQuerysetMixin, generics.RetrieveUpdateDe
         )
 
     def destroy(self, request: Request, *args, **kwargs):
-        return Response(
-            {"error": "地区为系统固定配置，无法删除"},
-            status=status.HTTP_403_FORBIDDEN,
+        if not request.user.is_superuser:
+            return Response({"error": "仅系统管理员可删除地区"}, status=status.HTTP_403_FORBIDDEN)
+
+        password = str(request.data.get("password") or "").strip()
+        if not password:
+            return Response(
+                {"error": "删除前请输入当前登录密码进行二次确认"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not request.user.check_password(password):
+            return Response(
+                {"error": "密码校验失败，请重试"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        region = self.get_object()
+        target_region_id = region.id
+        target_region_name = region.name
+        target_region_code = region.code
+        target_region_active = region.is_active
+        target_region_order = region.order
+        try:
+            self.perform_destroy(region)
+        except ProtectedError:
+            return Response(
+                {"error": "该地区仍有关联账号或应聘记录，无法删除"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="regions",
+            action="DELETE_REGION",
+            target_type="region",
+            target_id=target_region_id,
+            target_label=target_region_name,
+            summary=f"删除地区：{target_region_name}",
+            details={
+                "region_id": target_region_id,
+                "name": target_region_name,
+                "code": target_region_code,
+                "is_active": target_region_active,
+                "order": target_region_order,
+            },
         )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class AdminRegionFieldListView(AdminScopedMixin, generics.ListCreateAPIView):
     queryset = RegionField.objects.all()
