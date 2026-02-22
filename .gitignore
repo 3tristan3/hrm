@@ -23,6 +23,8 @@ backend_django/.env
 # Codex
 .codex/
 .tmp-edge-profile/
+/.tmp/
+/tmp*/
 
 # Node / Vite
 **/node_modules/

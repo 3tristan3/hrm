@@ -89,48 +89,11 @@
               <p class="header-sub">仅系统管理员可新增或删除地区，删除需输入密码二次确认</p>
             </div>
             <div class="header-actions">
+              <button type="button" class="btn btn-sm btn-primary" @click="openRegionCreateModal">新增地区</button>
               <span class="chip">{{ regions.length }} 个地区</span>
             </div>
           </div>
           <div class="card-body region-body">
-            <div class="region-create-panel">
-              <div class="panel-title">
-                <div>
-                  <h4>新增地区</h4>
-                  <p>填写地区基础信息并保存</p>
-                </div>
-                <span class="panel-pill">管理员操作</span>
-              </div>
-              <form class="form-compact" @submit.prevent="saveRegion">
-                <div class="form-grid-2">
-                  <div class="form-group">
-                    <label>地区名称</label>
-                    <input v-model.trim="regionForm.name" placeholder="如：华东地区" required />
-                  </div>
-                  <div class="form-group">
-                    <label>地区编码</label>
-                    <input v-model.trim="regionForm.code" placeholder="如：east" required />
-                  </div>
-                </div>
-                <div class="form-grid-2">
-                  <div class="form-group">
-                    <label>排序</label>
-                    <input v-model.number="regionForm.order" type="number" />
-                  </div>
-                  <div class="form-group">
-                    <label>状态</label>
-                    <select v-model="regionForm.is_active">
-                      <option :value="true">启用</option>
-                      <option :value="false">停用</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="form-actions right">
-                  <button type="button" class="btn btn-default" @click="resetRegionForm">重置</button>
-                  <button type="submit" class="btn btn-primary">新增地区</button>
-                </div>
-              </form>
-            </div>
             <div class="region-table-wrap">
               <table class="data-table">
                 <thead>
@@ -275,70 +238,11 @@
               <p class="header-sub">管理各地区 HR 账号、权限与密码安全</p>
             </div>
             <div class="header-actions">
+              <button class="btn btn-sm btn-default" type="button" @click="openSelfPasswordModal">修改我的密码</button>
               <span class="chip">{{ users.length }} 个账号</span>
             </div>
           </div>
           <div class="card-body">
-            <div class="account-panels">
-              <div class="account-panel">
-                <div class="panel-title">
-                  <div>
-                    <h4>重置账号密码</h4>
-                    <p>选择账号并设置新密码</p>
-                  </div>
-                  <span class="panel-pill">管理员操作</span>
-                </div>
-                <form class="form-compact" @submit.prevent="resetUserPassword">
-                  <div class="form-grid-2">
-                    <div class="form-group">
-                      <label>选择账号</label>
-                      <select v-model.number="passwordForm.user_id" required>
-                        <option value="">请选择账号</option>
-                        <option v-for="item in users" :key="item.id" :value="item.id">
-                          {{ item.username }}（{{ item.region_name || "-" }}）
-                        </option>
-                      </select>
-                    </div>
-                    <div class="form-group">
-                      <label>新密码</label>
-                      <input v-model="passwordForm.password" type="password" placeholder="请输入新密码" required />
-                    </div>
-                  </div>
-                  <div class="form-actions right">
-                    <button type="submit" class="btn btn-primary">重置密码</button>
-                  </div>
-                </form>
-              </div>
-              <div class="account-panel">
-                <div class="panel-title">
-                  <div>
-                    <h4>修改我的密码</h4>
-                    <p>更新当前登录账号的密码</p>
-                  </div>
-                  <span class="panel-pill subtle">安全</span>
-                </div>
-                <form class="form-compact" @submit.prevent="changeMyPassword">
-                  <div class="form-grid-3">
-                    <div class="form-group">
-                      <label>原密码</label>
-                      <input v-model="selfPasswordForm.old_password" type="password" placeholder="请输入原密码" required />
-                    </div>
-                    <div class="form-group">
-                      <label>新密码</label>
-                      <input v-model="selfPasswordForm.new_password" type="password" placeholder="请输入新密码" required />
-                    </div>
-                    <div class="form-group">
-                      <label>确认新密码</label>
-                      <input v-model="selfPasswordForm.confirm_password" type="password" placeholder="再次输入新密码" required />
-                    </div>
-                  </div>
-                  <div class="form-actions right">
-                    <button type="submit" class="btn btn-primary">更新密码</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-            <div class="divider"></div>
             <div class="account-table">
               <div class="table-header">
                 <div>
@@ -900,6 +804,133 @@
       </div>
     </div>
 
+    <div v-if="showResetPasswordModal" class="job-modal-overlay" @click.self="closeResetPasswordModal">
+      <div class="account-password-modal">
+        <div class="job-modal-header">
+          <div>
+            <div class="job-modal-title">重置账号密码</div>
+            <div class="job-modal-subtitle">为当前选中的账号设置新密码，提交后立即生效</div>
+          </div>
+          <button class="job-modal-close" type="button" @click="closeResetPasswordModal" title="关闭">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="job-modal-body">
+          <form class="form-compact" @submit.prevent="submitResetPassword">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label>目标账号</label>
+                <input
+                  :value="users.find((item) => item.id === passwordForm.user_id)?.username || '-'"
+                  type="text"
+                  disabled
+                />
+              </div>
+              <div class="form-group">
+                <label>新密码</label>
+                <input v-model="passwordForm.password" type="password" placeholder="请输入新密码" required />
+              </div>
+            </div>
+            <div class="form-actions right">
+              <button class="btn btn-sm btn-default" type="button" @click="closeResetPasswordModal">取消</button>
+              <button class="btn btn-sm btn-primary" type="submit" :disabled="!passwordForm.user_id || !passwordForm.password">确认重置</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showSelfPasswordModal" class="job-modal-overlay" @click.self="closeSelfPasswordModal">
+      <div class="account-password-modal wide">
+        <div class="job-modal-header">
+          <div>
+            <div class="job-modal-title">修改我的密码</div>
+            <div class="job-modal-subtitle">输入原密码与新密码，更新后需重新登录</div>
+          </div>
+          <button class="job-modal-close" type="button" @click="closeSelfPasswordModal" title="关闭">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="job-modal-body">
+          <form class="form-compact" @submit.prevent="submitSelfPassword">
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label>原密码</label>
+                <input v-model="selfPasswordForm.old_password" type="password" placeholder="请输入原密码" required />
+              </div>
+              <div class="form-group">
+                <label>新密码</label>
+                <input v-model="selfPasswordForm.new_password" type="password" placeholder="请输入新密码" required />
+              </div>
+              <div class="form-group">
+                <label>确认新密码</label>
+                <input v-model="selfPasswordForm.confirm_password" type="password" placeholder="再次输入新密码" required />
+              </div>
+            </div>
+            <div class="form-actions right">
+              <button class="btn btn-sm btn-default" type="button" @click="closeSelfPasswordModal">取消</button>
+              <button class="btn btn-sm btn-primary" type="submit">更新密码</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showRegionCreateModal" class="job-modal-overlay" @click.self="closeRegionCreateModal">
+      <div class="region-create-modal">
+        <div class="job-modal-header">
+          <div>
+            <div class="job-modal-title">新增地区</div>
+            <div class="job-modal-subtitle">填写地区基础信息并保存，保存后会立即同步到岗位与注册地区选项</div>
+          </div>
+          <button class="job-modal-close" type="button" @click="closeRegionCreateModal" title="关闭">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="job-modal-body">
+          <form class="form-compact" @submit.prevent="submitRegionCreate">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label>地区名称</label>
+                <input v-model.trim="regionForm.name" placeholder="如：华东地区" required />
+              </div>
+              <div class="form-group">
+                <label>地区编码</label>
+                <input v-model.trim="regionForm.code" placeholder="如：east" required />
+              </div>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label>排序</label>
+                <input v-model.number="regionForm.order" type="number" />
+              </div>
+              <div class="form-group">
+                <label>状态</label>
+                <select v-model="regionForm.is_active">
+                  <option :value="true">启用</option>
+                  <option :value="false">停用</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions right">
+              <button type="button" class="btn btn-sm btn-default" @click="resetRegionForm">重置</button>
+              <button type="button" class="btn btn-sm btn-default" @click="closeRegionCreateModal">取消</button>
+              <button type="submit" class="btn btn-sm btn-primary">保存地区</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showRegionDeleteModal" class="job-modal-overlay" @click.self="closeDeleteRegionModal">
       <div class="region-delete-modal">
         <div class="job-modal-header">
@@ -1044,12 +1075,15 @@ const {
   authForm,
   jobForm,
   regionForm,
+  showRegionCreateModal,
   showRegionDeleteModal,
   regionDeleteSubmitting,
   regionDeletePassword,
   pendingDeleteRegion,
   passwordForm,
   selfPasswordForm,
+  showResetPasswordModal,
+  showSelfPasswordModal,
   selectedJobIds,
   selectedApplicationIds,
   selectedInterviewIds,
@@ -1161,6 +1195,8 @@ const {
   formatTime,
   canScheduleInterview,
   scheduleActionLabel,
+  openRegionCreateModal,
+  closeRegionCreateModal,
   resetRegionForm,
   saveRegion,
   openDeleteRegionModal,
@@ -1176,6 +1212,9 @@ const {
   batchDeactivateJobs,
   batchDeleteJobs,
   saveJob,
+  closeResetPasswordModal,
+  openSelfPasswordModal,
+  closeSelfPasswordModal,
   resetUserPassword,
   changeMyPassword,
   selectUserForReset,
@@ -1233,4 +1272,25 @@ const {
   openAttachment,
   detailSections,
 } = useAdminAppPage();
+
+const submitRegionCreate = async () => {
+  const success = await saveRegion();
+  if (success) {
+    closeRegionCreateModal();
+  }
+};
+
+const submitResetPassword = async () => {
+  const success = await resetUserPassword();
+  if (success) {
+    closeResetPasswordModal();
+  }
+};
+
+const submitSelfPassword = async () => {
+  const success = await changeMyPassword();
+  if (success) {
+    closeSelfPasswordModal();
+  }
+};
 </script>

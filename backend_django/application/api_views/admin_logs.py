@@ -1,6 +1,18 @@
 """按职责拆分的视图模块。"""
 from .shared import *
 
+
+def _to_day_start(value):
+    """将日期转换为当前时区的当天起始时间。"""
+    naive = timezone.datetime.combine(value, timezone.datetime.min.time())
+    return timezone.make_aware(naive, timezone.get_current_timezone())
+
+
+def _to_next_day_start(value):
+    """将日期转换为当前时区下一天起始时间（用于闭区间右边界）。"""
+    return _to_day_start(value + timedelta(days=1))
+
+
 def operation_log_base_queryset():
     """统一操作日志关联查询，避免列表/详情各自维护一套 select_related。"""
     return OperationLog.objects.select_related(
@@ -47,12 +59,12 @@ class AdminOperationLogListView(AdminScopedMixin, generics.ListAPIView):
         if params.get("result"):
             queryset = queryset.filter(result=params["result"])
         if params.get("date_from"):
-            queryset = queryset.filter(created_at__date__gte=params["date_from"])
+            queryset = queryset.filter(created_at__gte=_to_day_start(params["date_from"]))
         if params.get("date_to"):
-            queryset = queryset.filter(created_at__date__lte=params["date_to"])
+            queryset = queryset.filter(created_at__lt=_to_next_day_start(params["date_to"]))
         if not params.get("application_id") and not params.get("date_from") and not params.get("date_to"):
-            recent_date = timezone.localdate() - timedelta(days=OPERATION_LOG_DEFAULT_DAYS)
-            queryset = queryset.filter(created_at__date__gte=recent_date)
+            recent_dt = timezone.now() - timedelta(days=OPERATION_LOG_DEFAULT_DAYS)
+            queryset = queryset.filter(created_at__gte=recent_dt)
         if params.get("keyword"):
             keyword = params["keyword"]
             queryset = queryset.filter(

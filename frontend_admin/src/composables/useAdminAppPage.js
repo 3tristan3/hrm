@@ -61,12 +61,15 @@ export const useAdminAppPage = () => {
   const authForm = reactive({ username: "", password: "", region_id: "" });
   const jobForm = reactive({ id: null, region: "", title: "", description: "", salary: "", education: "", order: 0, is_active: true });
   const regionForm = reactive({ name: "", code: "", order: 0, is_active: true });
+  const showRegionCreateModal = ref(false);
   const showRegionDeleteModal = ref(false);
   const regionDeleteSubmitting = ref(false);
   const regionDeletePassword = ref("");
   const pendingDeleteRegion = ref(null);
   const passwordForm = reactive({ user_id: "", password: "" });
   const selfPasswordForm = reactive({ old_password: "", new_password: "", confirm_password: "" });
+  const showResetPasswordModal = ref(false);
+  const showSelfPasswordModal = ref(false);
   const selectedJobIds = ref([]);
   const selectedApplicationIds = ref([]);
   const selectedInterviewIds = ref([]);
@@ -371,6 +374,13 @@ export const useAdminAppPage = () => {
   const resetRegionForm = () => {
     Object.assign(regionForm, { name: "", code: "", order: 0, is_active: true });
   };
+  const openRegionCreateModal = () => {
+    resetRegionForm();
+    showRegionCreateModal.value = true;
+  };
+  const closeRegionCreateModal = () => {
+    showRegionCreateModal.value = false;
+  };
   const saveRegion = async () => {
     const payload = {
       name: regionForm.name.trim(),
@@ -380,7 +390,7 @@ export const useAdminAppPage = () => {
     };
     if (!payload.name || !payload.code) {
       toastRef.value?.show("请填写地区名称和地区编码", "error");
-      return;
+      return false;
     }
     try {
       await request(`${adminBase}/regions/`, {
@@ -395,8 +405,10 @@ export const useAdminAppPage = () => {
       }
       publicRegions.value = [];
       await fetchPublicRegions();
+      return true;
     } catch (err) {
       notifyError(err);
+      return false;
     }
   };
   const openDeleteRegionModal = (item) => {
@@ -551,28 +563,58 @@ export const useAdminAppPage = () => {
   };
 
   // 账号
+  const resetPasswordFormFields = () => {
+    passwordForm.user_id = "";
+    passwordForm.password = "";
+  };
+
+  const resetSelfPasswordFormFields = () => {
+    selfPasswordForm.old_password = "";
+    selfPasswordForm.new_password = "";
+    selfPasswordForm.confirm_password = "";
+  };
+
+  const openResetPasswordModal = () => {
+    showResetPasswordModal.value = true;
+  };
+
+  const closeResetPasswordModal = () => {
+    showResetPasswordModal.value = false;
+    resetPasswordFormFields();
+  };
+
+  const openSelfPasswordModal = () => {
+    showSelfPasswordModal.value = true;
+  };
+
+  const closeSelfPasswordModal = () => {
+    showSelfPasswordModal.value = false;
+    resetSelfPasswordFormFields();
+  };
+
   const resetUserPassword = async () => {
     const { user_id, password } = passwordForm;
-    if (!user_id || !password) return;
+    if (!user_id || !password) return false;
     try {
       await request(`${adminBase}/users/${user_id}/password/`, {
         method: "POST",
         body: JSON.stringify({ password })
       });
       notifySuccess("密码已更新");
-      passwordForm.user_id = "";
-      passwordForm.password = "";
+      resetPasswordFormFields();
+      return true;
     } catch (err) {
       notifyError(err);
+      return false;
     }
   };
 
   const changeMyPassword = async () => {
     const { old_password, new_password, confirm_password } = selfPasswordForm;
-    if (!old_password || !new_password || !confirm_password) return;
+    if (!old_password || !new_password || !confirm_password) return false;
     if (new_password !== confirm_password) {
       toastRef.value?.show("两次输入的新密码不一致", "error");
-      return;
+      return false;
     }
     try {
       const result = await request(`${authBase}/password/`, {
@@ -582,20 +624,21 @@ export const useAdminAppPage = () => {
       if (result?.force_relogin) {
         notifySuccess(result?.message || "密码已更新，请重新登录");
         await logout(true);
-        return;
+        return true;
       }
       notifySuccess(result?.message || "密码已更新");
-      selfPasswordForm.old_password = "";
-      selfPasswordForm.new_password = "";
-      selfPasswordForm.confirm_password = "";
+      resetSelfPasswordFormFields();
+      return true;
     } catch (err) {
       notifyError(err);
+      return false;
     }
   };
 
   const selectUserForReset = (item) => {
     passwordForm.user_id = item.id;
     passwordForm.password = "";
+    showResetPasswordModal.value = true;
   };
 
   const deleteUser = async (item) => {
@@ -965,12 +1008,15 @@ export const useAdminAppPage = () => {
     authForm,
     jobForm,
     regionForm,
+    showRegionCreateModal,
     showRegionDeleteModal,
     regionDeleteSubmitting,
     regionDeletePassword,
     pendingDeleteRegion,
     passwordForm,
     selfPasswordForm,
+    showResetPasswordModal,
+    showSelfPasswordModal,
     selectedJobIds,
     selectedApplicationIds,
     selectedInterviewIds,
@@ -1082,6 +1128,8 @@ export const useAdminAppPage = () => {
     formatTime,
     canScheduleInterview,
     scheduleActionLabel,
+    openRegionCreateModal,
+    closeRegionCreateModal,
     resetRegionForm,
     saveRegion,
     openDeleteRegionModal,
@@ -1097,6 +1145,10 @@ export const useAdminAppPage = () => {
     batchDeactivateJobs,
     batchDeleteJobs,
     saveJob,
+    openResetPasswordModal,
+    closeResetPasswordModal,
+    openSelfPasswordModal,
+    closeSelfPasswordModal,
     resetUserPassword,
     changeMyPassword,
     selectUserForReset,
