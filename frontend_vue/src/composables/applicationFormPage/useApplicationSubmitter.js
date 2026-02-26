@@ -39,8 +39,18 @@ export const createApplicationSubmitter = ({
       body: formData,
     });
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.error || "附件上传失败");
+      let body = {};
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (contentType.includes("application/json")) {
+        body = await response.json().catch(() => ({}));
+      } else {
+        await response.text().catch(() => "");
+      }
+      if (response.status === 413) {
+        throw new Error("附件上传失败：文件过大（网关限制），请压缩文件后重试");
+      }
+      const reason = body?.error ? String(body.error) : `HTTP ${response.status}`;
+      throw new Error(`附件上传失败：${reason}`);
     }
   };
 

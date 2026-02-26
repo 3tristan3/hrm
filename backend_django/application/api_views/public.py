@@ -1,5 +1,9 @@
 """按职责拆分的视图模块。"""
+import logging
+
 from .shared import *
+
+logger = logging.getLogger(__name__)
 
 class RegionListView(APIView):
     def get(self, request: Request):
@@ -100,6 +104,40 @@ class ApplicationTokenAccessMixin:
         return None
 
 class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
+    @staticmethod
+    def _request_meta(request: Request):
+        forwarded_for = str(request.META.get("HTTP_X_FORWARDED_FOR", "") or "").strip()
+        remote_addr = forwarded_for.split(",")[0].strip() if forwarded_for else str(
+            request.META.get("REMOTE_ADDR", "") or ""
+        ).strip()
+        return {
+            "request_id": request_id_from_request(request),
+            "remote_addr": remote_addr,
+            "user_agent": str(request.META.get("HTTP_USER_AGENT", "") or "")[:180],
+        }
+
+    def _log_upload_failure(
+        self,
+        request: Request,
+        *,
+        application_id: int | None,
+        category: str,
+        reason: str,
+        status_code: int,
+        details=None,
+    ):
+        meta = self._request_meta(request)
+        logger.warning(
+            "application_attachment_upload_failed reason=%s status=%s app_id=%s category=%s request_id=%s ip=%s details=%r",
+            reason,
+            status_code,
+            application_id,
+            category,
+            meta["request_id"],
+            meta["remote_addr"],
+            details,
+        )
+
     def get(self, request: Request, pk: int):
         application = self._resolve_accessible_application(request, pk)
         if not application:
@@ -112,9 +150,24 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
     def post(self, request: Request, pk: int):
         application = self._resolve_accessible_application(request, pk)
         if not application:
+            self._log_upload_failure(
+                request,
+                application_id=pk,
+                category=str(request.data.get("category") or ""),
+                reason="application_not_found_or_token_invalid",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
             return self._not_found_response()
         serializer = ApplicationAttachmentUploadSerializer(data=request.data)
         if not serializer.is_valid():
+            self._log_upload_failure(
+                request,
+                application_id=application.pk,
+                category=str(request.data.get("category") or ""),
+                reason="invalid_payload",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details=serializer.errors,
+            )
             return Response(
                 {"error": "参数校验失败", "details": serializer.errors},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -122,11 +175,26 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
         category = serializer.validated_data["category"]
         files = request.FILES.getlist("file")
         if not files:
+            self._log_upload_failure(
+                request,
+                application_id=application.pk,
+                category=category,
+                reason="missing_files",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
             return Response(
                 {"error": "未上传文件"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if category != "other" and len(files) > 1:
+            self._log_upload_failure(
+                request,
+                application_id=application.pk,
+                category=category,
+                reason="too_many_files_for_single_category",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={"file_count": len(files)},
+            )
             return Response(
                 {"error": "该附件类型仅支持上传单个文件"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -135,6 +203,17 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
         max_file_mb, max_total_mb, max_file_bytes, max_total_bytes = _resolve_attachment_limits()
         oversized_files = [upload.name for upload in files if _safe_file_size(upload) > max_file_bytes]
         if oversized_files:
+            self._log_upload_failure(
+                request,
+                application_id=application.pk,
+                category=category,
+                reason="single_file_size_exceeded",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={
+                    "max_file_mb": max_file_mb,
+                    "oversized_files": oversized_files,
+                },
+            )
             return Response(
                 {
                     "error": f"单个文件不能超过{max_file_mb}MB",
@@ -153,21 +232,48 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
             )
         projected_total_bytes = max(existing_total_bytes - replaced_bytes, 0) + incoming_total_bytes
         if projected_total_bytes > max_total_bytes:
+            self._log_upload_failure(
+                request,
+                application_id=application.pk,
+                category=category,
+                reason="total_attachment_size_exceeded",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={
+                    "max_total_mb": max_total_mb,
+                    "existing_total_bytes": existing_total_bytes,
+                    "incoming_total_bytes": incoming_total_bytes,
+                    "projected_total_bytes": projected_total_bytes,
+                },
+            )
             return Response(
                 {"error": f"附件总大小不能超过{max_total_mb}MB"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if category != "other":
-            ApplicationAttachment.objects.filter(
-                application=application, category=category
-            ).delete()
-        attachments = [
-            ApplicationAttachment.objects.create(
-                application=application, category=category, file=upload
+        try:
+            if category != "other":
+                ApplicationAttachment.objects.filter(
+                    application=application, category=category
+                ).delete()
+            attachments = [
+                ApplicationAttachment.objects.create(
+                    application=application, category=category, file=upload
+                )
+                for upload in files
+            ]
+        except Exception:
+            meta = self._request_meta(request)
+            logger.exception(
+                "application_attachment_upload_exception app_id=%s category=%s request_id=%s ip=%s",
+                application.pk,
+                category,
+                meta["request_id"],
+                meta["remote_addr"],
             )
-            for upload in files
-        ]
+            return Response(
+                {"error": "附件上传失败，请稍后重试"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         output = ApplicationAttachmentSerializer(
             attachments, many=True, context={"request": request}
         )
