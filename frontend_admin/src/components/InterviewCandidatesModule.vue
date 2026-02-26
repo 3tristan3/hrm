@@ -117,43 +117,22 @@
                   </span>
                 </td>
                 <td class="action-cell">
-                  <div class="sms-status-shell" :class="`is-${smsStatusShell(item).status}`">
+                  <div
+                    class="sms-status-shell"
+                    :class="`is-${smsStatusShell(item).status}`"
+                    @mouseenter="openSmsPopover(item, $event)"
+                    @mouseleave="scheduleCloseSmsPopover"
+                  >
                     <button
                       type="button"
                       class="sms-status-dot-btn"
                       aria-label="查看短信状态"
+                      @focus="openSmsPopover(item, $event)"
+                      @blur="scheduleCloseSmsPopover"
+                      @click.stop="toggleSmsPopover(item, $event)"
                     >
                       <span class="sms-status-dot" aria-hidden="true"></span>
                     </button>
-                    <div class="sms-status-popover">
-                      <div class="sms-status-popover-title">短信发送状态</div>
-                      <div class="sms-status-popover-row">
-                        <span>状态</span>
-                        <span class="sms-status-pill" :class="`is-${smsStatusShell(item).status}`">
-                          {{ smsStatusShell(item).label }}
-                        </span>
-                      </div>
-                      <div class="sms-status-popover-row">
-                        <span>时间</span>
-                        <span>{{ smsStatusTime(item) }}</span>
-                      </div>
-                      <div class="sms-status-popover-row">
-                        <span>号码</span>
-                        <span>{{ smsStatusShell(item).phone || "-" }}</span>
-                      </div>
-                      <div v-if="smsStatusShell(item).error" class="sms-status-popover-error">
-                        {{ smsStatusShell(item).error }}
-                      </div>
-                      <div v-if="smsStatusShell(item).retryCount > 0" class="sms-status-popover-row">
-                        <span>重试次数</span>
-                        <span>{{ smsStatusShell(item).retryCount }} 次</span>
-                      </div>
-                      <div v-if="smsCanRetry(item)" class="sms-status-popover-actions">
-                        <button type="button" class="sms-status-retry-btn" @click.stop="retrySms(item)">
-                          失败重发
-                        </button>
-                      </div>
-                    </div>
                   </div>
                   <button
                     class="btn btn-xs btn-primary"
@@ -346,10 +325,48 @@
       </div>
     </div>
   </div>
+  <teleport to="body">
+    <div
+      v-if="activeSmsItem"
+      ref="smsPopoverRef"
+      class="sms-status-popover sms-status-popover-floating"
+      :style="smsPopoverStyle"
+      @mouseenter="cancelCloseSmsPopover"
+      @mouseleave="closeSmsPopover"
+    >
+      <div class="sms-status-popover-title">短信发送状态</div>
+      <div class="sms-status-popover-row">
+        <span>状态</span>
+        <span class="sms-status-pill" :class="`is-${activeSmsShell.status}`">
+          {{ activeSmsShell.label }}
+        </span>
+      </div>
+      <div class="sms-status-popover-row">
+        <span>时间</span>
+        <span>{{ activeSmsTime }}</span>
+      </div>
+      <div class="sms-status-popover-row">
+        <span>号码</span>
+        <span>{{ activeSmsShell.phone || "-" }}</span>
+      </div>
+      <div v-if="activeSmsShell.error" class="sms-status-popover-error">
+        {{ activeSmsShell.error }}
+      </div>
+      <div v-if="activeSmsShell.retryCount > 0" class="sms-status-popover-row">
+        <span>重试次数</span>
+        <span>{{ activeSmsShell.retryCount }} 次</span>
+      </div>
+      <div v-if="activeSmsCanRetry" class="sms-status-popover-actions">
+        <button type="button" class="sms-status-retry-btn" @click.stop="retrySms(activeSmsItem)">
+          失败重发
+        </button>
+      </div>
+    </div>
+  </teleport>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import DetailNameButton from "./DetailNameButton.vue";
 import DateTimeSlidePicker from "./DateTimeSlidePicker.vue";
 import ListPaginationBar from "./ListPaginationBar.vue";
@@ -434,6 +451,113 @@ const { smsPreviewText, smsStatusShell, smsStatusTime, smsCanRetry, retrySms } =
     emit,
   });
 
+const smsPopoverRef = ref(null);
+const activeSmsItem = ref(null);
+const smsPopoverAnchor = ref(null);
+const smsPopoverStyle = ref({
+  top: "0px",
+  left: "0px",
+});
+let smsPopoverCloseTimer = null;
+let smsPopoverListenersAttached = false;
+
+const activeSmsShell = computed(() => {
+  if (!activeSmsItem.value) {
+    return { status: "idle", label: "-", phone: "", error: "", retryCount: 0 };
+  }
+  return smsStatusShell(activeSmsItem.value);
+});
+const activeSmsTime = computed(() =>
+  activeSmsItem.value ? smsStatusTime(activeSmsItem.value) : "-"
+);
+const activeSmsCanRetry = computed(() =>
+  activeSmsItem.value ? smsCanRetry(activeSmsItem.value) : false
+);
+
+const clearSmsPopoverCloseTimer = () => {
+  if (smsPopoverCloseTimer) {
+    clearTimeout(smsPopoverCloseTimer);
+    smsPopoverCloseTimer = null;
+  }
+};
+
+const attachSmsPopoverListeners = () => {
+  if (smsPopoverListenersAttached) {
+    return;
+  }
+  window.addEventListener("scroll", updateSmsPopoverPosition, true);
+  window.addEventListener("resize", updateSmsPopoverPosition);
+  smsPopoverListenersAttached = true;
+};
+
+const detachSmsPopoverListeners = () => {
+  if (!smsPopoverListenersAttached) {
+    return;
+  }
+  window.removeEventListener("scroll", updateSmsPopoverPosition, true);
+  window.removeEventListener("resize", updateSmsPopoverPosition);
+  smsPopoverListenersAttached = false;
+};
+
+const updateSmsPopoverPosition = async () => {
+  if (!smsPopoverAnchor.value || !activeSmsItem.value) {
+    return;
+  }
+  const anchorRect = smsPopoverAnchor.value.getBoundingClientRect();
+  const width = 228;
+  const margin = 8;
+  let left = anchorRect.left + anchorRect.width / 2 - width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+  let top = anchorRect.bottom + 8;
+
+  smsPopoverStyle.value = { top: `${top}px`, left: `${left}px` };
+  await nextTick();
+
+  const popoverEl = smsPopoverRef.value;
+  if (!popoverEl) {
+    return;
+  }
+  const height = popoverEl.offsetHeight || 0;
+  if (top + height > window.innerHeight - margin) {
+    top = Math.max(margin, window.innerHeight - height - margin);
+    smsPopoverStyle.value = { top: `${top}px`, left: `${left}px` };
+  }
+};
+
+const openSmsPopover = (item, event) => {
+  clearSmsPopoverCloseTimer();
+  activeSmsItem.value = item;
+  smsPopoverAnchor.value = event?.currentTarget || null;
+  attachSmsPopoverListeners();
+  updateSmsPopoverPosition();
+};
+
+const closeSmsPopover = () => {
+  clearSmsPopoverCloseTimer();
+  activeSmsItem.value = null;
+  smsPopoverAnchor.value = null;
+  detachSmsPopoverListeners();
+};
+
+const scheduleCloseSmsPopover = () => {
+  clearSmsPopoverCloseTimer();
+  smsPopoverCloseTimer = setTimeout(() => {
+    closeSmsPopover();
+  }, 120);
+};
+
+const cancelCloseSmsPopover = () => {
+  clearSmsPopoverCloseTimer();
+};
+
+const toggleSmsPopover = (item, event) => {
+  if (activeSmsItem.value?.id === item.id) {
+    closeSmsPopover();
+    return;
+  }
+  openSmsPopover(item, event);
+};
+
 const onScheduleSubmit = () => {
   emit("save-schedule");
 };
@@ -445,4 +569,9 @@ const formatDateOffset = (offsetDays = 0) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 const todayDate = formatDateOffset(0);
+
+onBeforeUnmount(() => {
+  clearSmsPopoverCloseTimer();
+  detachSmsPopoverListeners();
+});
 </script>

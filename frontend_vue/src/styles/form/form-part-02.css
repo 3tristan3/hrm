@@ -42,6 +42,12 @@
   font-size: 12px;
 }
 
+.field-error {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+
 .job-preview {
   background: #EFF6FF;
   border-radius: 12px;

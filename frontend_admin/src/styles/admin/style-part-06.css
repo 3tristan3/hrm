@@ -284,6 +284,84 @@
   font-size: 11px;
   color: #64748B;
 }
+.sms-status-popover-floating {
+  position: fixed;
+  width: 228px;
+  background: #FFFFFF;
+  border: 1px solid #D8E3F0;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  padding: 10px 12px;
+  text-align: left;
+  z-index: 2100;
+}
+.sms-status-popover-floating .sms-status-popover-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 6px;
+}
+.sms-status-popover-floating .sms-status-popover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #334155;
+  margin-top: 4px;
+}
+.sms-status-popover-floating .sms-status-pill {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+}
+.sms-status-popover-floating .sms-status-pill.is-sending {
+  background: rgba(37, 99, 235, 0.14);
+  color: #1D4ED8;
+}
+.sms-status-popover-floating .sms-status-pill.is-success {
+  background: rgba(22, 163, 74, 0.16);
+  color: #166534;
+}
+.sms-status-popover-floating .sms-status-pill.is-failed {
+  background: rgba(220, 38, 38, 0.14);
+  color: #B91C1C;
+}
+.sms-status-popover-floating .sms-status-popover-error {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #B91C1C;
+}
+.sms-status-popover-floating .sms-status-popover-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+.sms-status-popover-floating .sms-status-retry-btn {
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid #93C5FD;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.sms-status-popover-floating .sms-status-retry-btn:hover {
+  background: #DBEAFE;
+  border-color: #60A5FA;
+  color: #1E40AF;
+}
+.sms-status-popover-floating .sms-status-retry-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 1px;
+}
 .passed-table-wrap {
   min-height: 0;
   border: 1px solid var(--border-color);
