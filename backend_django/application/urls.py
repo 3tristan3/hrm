@@ -19,6 +19,7 @@ from .views import (
     AdminTalentPoolCandidateBatchAddView,
     AdminTalentPoolCandidateBatchToInterviewView,
     AdminInterviewCandidateResultView,
+    AdminInterviewCandidateResendSmsView,
     AdminInterviewCandidateScheduleView,
     AdminJobDetailView,
     AdminJobBatchStatusView,
@@ -41,7 +42,6 @@ from .views import (
     LoginView,
     LogoutView,
     MeView,
-    MockOAView,
     RegisterView,
     RegionListView,
 )
@@ -63,7 +63,6 @@ urlpatterns = [
         name="application-discard",
     ),
     path("application/submit/", ApplicationSubmitView.as_view(), name="application-submit"),
-    path("application/mock-oa/", MockOAView.as_view(), name="mock-oa"),
     path("auth/register/", RegisterView.as_view(), name="auth-register"),
     path("auth/login/", LoginView.as_view(), name="auth-login"),
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
@@ -155,6 +154,11 @@ urlpatterns = [
         "admin/interview-candidates/<int:pk>/result/",
         AdminInterviewCandidateResultView.as_view(),
         name="admin-interview-candidate-result",
+    ),
+    path(
+        "admin/interview-candidates/<int:pk>/resend-sms/",
+        AdminInterviewCandidateResendSmsView.as_view(),
+        name="admin-interview-candidate-resend-sms",
     ),
     path(
         "admin/interview-candidates/batch-add/",

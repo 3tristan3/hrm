@@ -63,17 +63,6 @@ class ApplicationCreateView(APIView):
 class ApplicationSubmitView(ApplicationCreateView):
     pass
 
-class MockOAView(APIView):
-    def post(self, request: Request):
-        payload = request.data
-        return Response(
-            {
-                "requestId": "MOCK-REQUEST-001",
-                "received": payload,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
 class ApplicationTokenAccessMixin:
     authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [AllowAny]
