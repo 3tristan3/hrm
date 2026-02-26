@@ -16,6 +16,7 @@
     primary-action-class="btn-primary"
     :primary-action-disabled="selectedIds.length === 0"
     :pagination="pagination"
+    :page-size-options="pageSizeOptions"
     :loading="loading"
     @refresh="$emit('refresh')"
     @reset-filters="$emit('reset-filters')"
@@ -24,6 +25,7 @@
     @update:selected-ids="$emit('update:selected-ids', $event)"
     @update:is-all-visible-selected="$emit('update:is-all-visible-selected', $event)"
     @change-page="$emit('change-page', $event)"
+    @change-page-size="$emit('change-page-size', $event)"
   />
 </template>
 
@@ -40,6 +42,7 @@ defineProps({
   selectedIds: { type: Array, default: () => [] },
   isAllVisibleSelected: { type: Boolean, default: false },
   pagination: { type: Object, required: true },
+  pageSizeOptions: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
 });
 
@@ -51,5 +54,6 @@ defineEmits([
   "update:selected-ids",
   "update:is-all-visible-selected",
   "change-page",
+  "change-page-size",
 ]);
 </script>

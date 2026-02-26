@@ -9,6 +9,7 @@ export const useAdminSessionActions = ({
   currentUsername,
   dataLoaded,
   dataLoading,
+  interviewPagination,
   passedPagination,
   talentPagination,
   operationLogPagination,
@@ -76,8 +77,12 @@ export const useAdminSessionActions = ({
       dataLoaded.operationLogs = false;
       dataLoaded.interviewMeta = false;
       dataLoaded.users = false;
+      resetPageState(interviewPagination);
       resetPageState(passedPagination);
       resetPageState(talentPagination);
+      interviewPagination.pageSize = LIST_PAGE_SIZE;
+      passedPagination.pageSize = LIST_PAGE_SIZE;
+      talentPagination.pageSize = LIST_PAGE_SIZE;
       resetOperationLogPageState();
       operationLogs.value = [];
       selectedPassedIds.value = [];
@@ -119,6 +124,8 @@ export const useAdminSessionActions = ({
     token.value = "";
     localStorage.removeItem("admin_token");
     localStorage.removeItem("admin_username");
+    localStorage.removeItem("admin_is_superuser");
+    localStorage.removeItem("admin_can_view_all");
     currentUsername.value = "";
     regions.value = [];
     jobs.value = [];
@@ -150,8 +157,12 @@ export const useAdminSessionActions = ({
     dataLoading.operationLogs = false;
     dataLoading.interviewMeta = false;
     dataLoading.users = false;
+    resetPageState(interviewPagination);
     resetPageState(passedPagination);
     resetPageState(talentPagination);
+    interviewPagination.pageSize = LIST_PAGE_SIZE;
+    passedPagination.pageSize = LIST_PAGE_SIZE;
+    talentPagination.pageSize = LIST_PAGE_SIZE;
     resetOperationLogPageState();
     Object.assign(interviewMeta, createInterviewMeta());
     activeApplication.value = null;

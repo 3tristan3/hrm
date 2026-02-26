@@ -10,8 +10,8 @@ const withQuery = (url, params = {}) => {
 };
 
 export const createInterviewApi = ({ adminBase, request }) => ({
-  async listCandidates() {
-    return request(`${adminBase}/interview-candidates/`);
+  async listCandidates(params = {}) {
+    return request(withQuery(`${adminBase}/interview-candidates/`, params));
   },
   async getMeta() {
     return request(`${adminBase}/interview-meta/`);
@@ -36,6 +36,12 @@ export const createInterviewApi = ({ adminBase, request }) => ({
   },
   async saveResult(id, payload) {
     return request(`${adminBase}/interview-candidates/${id}/result/`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  },
+  async resendSms(id, payload = {}) {
+    return request(`${adminBase}/interview-candidates/${id}/resend-sms/`, {
       method: "POST",
       body: JSON.stringify(payload || {}),
     });

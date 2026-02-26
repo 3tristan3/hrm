@@ -103,6 +103,7 @@ const props = defineProps({
   modelValue: { type: String, default: "" },
   minDate: { type: String, default: "" },
   days: { type: Number, default: 14 },
+  defaultTime: { type: String, default: "" },
   startTime: { type: String, default: "00:00" },
   endTime: { type: String, default: "23:55" },
   stepMinutes: { type: Number, default: 5 },
@@ -210,8 +211,10 @@ const selectedDateObject = computed(() => parseDate(selectedDate.value));
 const getDefaultDate = () => formatDate(minSelectableDate.value);
 
 const getDefaultTime = () => {
-  const seedHour = Math.floor(startMinutes.value / 60);
-  const seedMinute = startMinutes.value % 60;
+  const seededMinutes = parseTimeToMinutes(props.defaultTime);
+  const resolvedMinutes = seededMinutes === null ? startMinutes.value : seededMinutes;
+  const seedHour = Math.floor(resolvedMinutes / 60);
+  const seedMinute = resolvedMinutes % 60;
   return clampAndNormalizeTime(seedHour, seedMinute);
 };
 

@@ -112,13 +112,13 @@
         </div>
         <div v-else class="empty-state">{{ emptyText }}</div>
       </div>
-      <div v-if="showPagination" class="list-pagination">
-        <div class="pagination-meta">第 {{ currentPage }} / {{ totalPages }} 页</div>
-        <div class="pagination-actions">
-          <button class="btn btn-sm btn-default" type="button" :disabled="loading || !canPrev" @click="$emit('change-page', currentPage - 1)">上一页</button>
-          <button class="btn btn-sm btn-default" type="button" :disabled="loading || !canNext" @click="$emit('change-page', currentPage + 1)">下一页</button>
-        </div>
-      </div>
+      <ListPaginationBar
+        :pagination="pagination"
+        :loading="loading"
+        :page-size-options="pageSizeOptions"
+        @change-page="$emit('change-page', $event)"
+        @change-page-size="$emit('change-page-size', $event)"
+      />
     </div>
   </div>
 </template>
@@ -126,10 +126,12 @@
 <script setup>
 import { computed } from "vue";
 import DetailNameButton from "./DetailNameButton.vue";
+import ListPaginationBar from "./ListPaginationBar.vue";
 
 const emit = defineEmits([
   "refresh",
   "change-page",
+  "change-page-size",
   "open-detail",
   "reset-filters",
   "primary-action",
@@ -198,6 +200,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  pageSizeOptions: {
+    type: Array,
+    default: () => [],
+  },
   showPrimaryAction: {
     type: Boolean,
     default: false,
@@ -216,13 +222,7 @@ const props = defineProps({
   },
 });
 
-const pageSize = computed(() => Math.max(Number(props.pagination?.pageSize || 30), 1));
 const totalCount = computed(() => Math.max(Number(props.pagination?.count || props.items.length), props.items.length));
-const currentPage = computed(() => Math.max(Number(props.pagination?.page || 1), 1));
-const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)));
-const canPrev = computed(() => currentPage.value > 1);
-const canNext = computed(() => currentPage.value < totalPages.value);
-const showPagination = computed(() => totalCount.value > pageSize.value);
 const selectedCount = computed(() => props.selectedIds.length);
 
 const localSelectedIds = computed({

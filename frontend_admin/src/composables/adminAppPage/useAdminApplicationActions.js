@@ -7,6 +7,7 @@ export const useAdminApplicationActions = ({
   selectedTalentIds,
   activeTab,
   dataLoaded,
+  interviewPagination,
   passedPagination,
   talentPagination,
   operationLogPagination,
@@ -25,12 +26,12 @@ export const useAdminApplicationActions = ({
   notifySuccess,
 }) => {
   const refreshInterviewModules = async ({ forcePassed = false, forceTalent = false } = {}) => {
-    await loadInterviewCandidates(true);
+    await loadInterviewCandidates(true, interviewPagination.page || 1);
     if (forcePassed || dataLoaded.passed) {
-      await loadPassedCandidates(true);
+      await loadPassedCandidates(true, passedPagination.page || 1);
     }
     if (forceTalent || dataLoaded.talent) {
-      await loadTalentPoolCandidates(true);
+      await loadTalentPoolCandidates(true, talentPagination.page || 1);
     }
   };
 
@@ -150,9 +151,16 @@ export const useAdminApplicationActions = ({
   };
 
   const refreshInterviewCandidates = async () => {
-    await loadInterviewCandidates(true);
+    await loadInterviewCandidates(true, 1);
+    selectedInterviewIds.value = [];
     resetInterviewFilters();
     notifySuccess("拟面试人员列表已刷新");
+  };
+
+  const changeInterviewPage = async (nextPage) => {
+    const page = Math.max(Number(nextPage || 1), 1);
+    if (page === interviewPagination.page) return;
+    await loadInterviewCandidates(true, page);
   };
 
   const changePassedPage = async (nextPage) => {
@@ -165,6 +173,33 @@ export const useAdminApplicationActions = ({
     const page = Math.max(Number(nextPage || 1), 1);
     if (page === talentPagination.page) return;
     await loadTalentPoolCandidates(true, page);
+  };
+
+  const changeInterviewPageSize = async (nextPageSize) => {
+    const pageSize = Number(nextPageSize || interviewPagination.pageSize);
+    if (!Number.isFinite(pageSize) || pageSize <= 0) return;
+    if (pageSize === Number(interviewPagination.pageSize)) return;
+    interviewPagination.pageSize = pageSize;
+    await loadInterviewCandidates(true, 1);
+    selectedInterviewIds.value = [];
+  };
+
+  const changePassedPageSize = async (nextPageSize) => {
+    const pageSize = Number(nextPageSize || passedPagination.pageSize);
+    if (!Number.isFinite(pageSize) || pageSize <= 0) return;
+    if (pageSize === Number(passedPagination.pageSize)) return;
+    passedPagination.pageSize = pageSize;
+    await loadPassedCandidates(true, 1);
+    selectedPassedIds.value = [];
+  };
+
+  const changeTalentPageSize = async (nextPageSize) => {
+    const pageSize = Number(nextPageSize || talentPagination.pageSize);
+    if (!Number.isFinite(pageSize) || pageSize <= 0) return;
+    if (pageSize === Number(talentPagination.pageSize)) return;
+    talentPagination.pageSize = pageSize;
+    await loadTalentPoolCandidates(true, 1);
+    selectedTalentIds.value = [];
   };
 
   const changeOperationLogPage = async (target) => {
@@ -293,8 +328,12 @@ export const useAdminApplicationActions = ({
     addSelectedToTalentPool,
     addSelectedTalentToInterviewPool,
     refreshInterviewCandidates,
+    changeInterviewPage,
     changePassedPage,
     changeTalentPage,
+    changeInterviewPageSize,
+    changePassedPageSize,
+    changeTalentPageSize,
     changeOperationLogPage,
     changeOperationLogPageSize,
     refreshPassedCandidates,

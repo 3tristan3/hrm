@@ -118,6 +118,7 @@
 }
 .interview-table-wrap {
   min-height: 0;
+  height: 100%;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: auto;
@@ -141,7 +142,7 @@
   text-align: center;
 }
 .interview-table td.action-cell {
-  min-width: 248px;
+  min-width: 272px;
   white-space: nowrap;
 }
 .interview-table .action-cell {
@@ -158,6 +159,130 @@
 }
 .interview-table td .chip {
   white-space: nowrap;
+}
+.interview-table .sms-status-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.interview-table .sms-status-dot-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #CBD5E1;
+  border-radius: 999px;
+  background: #FFFFFF;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+.interview-table .sms-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #94A3B8;
+}
+.interview-table .sms-status-shell.is-sending .sms-status-dot {
+  background: #2563EB;
+}
+.interview-table .sms-status-shell.is-success .sms-status-dot {
+  background: #16A34A;
+}
+.interview-table .sms-status-shell.is-failed .sms-status-dot {
+  background: #DC2626;
+}
+.interview-table .sms-status-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: 228px;
+  background: #FFFFFF;
+  border: 1px solid #D8E3F0;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  padding: 10px 12px;
+  text-align: left;
+  z-index: 30;
+  display: none;
+}
+.interview-table .sms-status-shell:hover .sms-status-popover,
+.interview-table .sms-status-shell:focus-within .sms-status-popover {
+  display: block;
+}
+.interview-table .sms-status-popover-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 6px;
+}
+.interview-table .sms-status-popover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #334155;
+  margin-top: 4px;
+}
+.interview-table .sms-status-pill {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+}
+.interview-table .sms-status-pill.is-sending {
+  background: rgba(37, 99, 235, 0.14);
+  color: #1D4ED8;
+}
+.interview-table .sms-status-pill.is-success {
+  background: rgba(22, 163, 74, 0.16);
+  color: #166534;
+}
+.interview-table .sms-status-pill.is-failed {
+  background: rgba(220, 38, 38, 0.14);
+  color: #B91C1C;
+}
+.interview-table .sms-status-popover-error {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #B91C1C;
+}
+.interview-table .sms-status-popover-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+.interview-table .sms-status-retry-btn {
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid #93C5FD;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.interview-table .sms-status-retry-btn:hover {
+  background: #DBEAFE;
+  border-color: #60A5FA;
+  color: #1E40AF;
+}
+.interview-table .sms-status-retry-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 1px;
+}
+.interview-table .sms-status-popover-footnote {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748B;
 }
 .passed-table-wrap {
   min-height: 0;
@@ -207,6 +332,9 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+.interview-card .interviews-scroll {
+  overflow: hidden;
 }
 .list-pagination {
   margin-top: 12px;

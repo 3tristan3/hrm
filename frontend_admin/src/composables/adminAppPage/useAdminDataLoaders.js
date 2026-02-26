@@ -1,7 +1,6 @@
-import { cursorFromLink, withQuery } from "../../api/client";
 import { createInterviewMeta } from "../../utils/interviewMeta";
-import { LIST_PAGE_SIZE, applyListPagePayload } from "../../utils/pagination";
-import { normalizeOperationLogMeta } from "../../constants/operationLog";
+import { applyListPagePayload } from "../../utils/pagination";
+import { createOperationLogLoaders } from "./useOperationLogLoaders";
 
 export const useAdminDataLoaders = ({
   buildApiUrl,
@@ -16,6 +15,7 @@ export const useAdminDataLoaders = ({
   jobs,
   applications,
   interviewCandidates,
+  interviewPagination,
   passedCandidates,
   talentPoolCandidates,
   operationLogs,
@@ -114,12 +114,19 @@ export const useAdminDataLoaders = ({
     }
   };
 
-  const loadInterviewCandidates = async (force = false) => {
+  const loadInterviewCandidates = async (
+    force = false,
+    page = interviewPagination.page
+  ) => {
     if (dataLoading.interviews) return;
-    if (!force && dataLoaded.interviews) return;
+    if (!force && dataLoaded.interviews && page === interviewPagination.page) return;
     dataLoading.interviews = true;
     try {
-      interviewCandidates.value = await interviewApi.listCandidates();
+      const payload = await interviewApi.listCandidates({
+        page,
+        page_size: interviewPagination.pageSize,
+      });
+      interviewCandidates.value = applyListPagePayload(interviewPagination, payload, page);
       const availableIds = new Set(interviewCandidates.value.map((item) => item.id));
       selectedInterviewIds.value = selectedInterviewIds.value.filter((id) =>
         availableIds.has(id)
@@ -204,109 +211,26 @@ export const useAdminDataLoaders = ({
     }
   };
 
-  const loadOperationLogMeta = async (force = false) => {
-    if (operationLogMeta.loaded && !force) return;
-    try {
-      const payload = await request(`${adminBase}/operation-logs/meta/`);
-      const normalized = normalizeOperationLogMeta(payload);
-      operationLogMeta.module_labels = normalized.module_labels;
-      operationLogMeta.action_labels = normalized.action_labels;
-      operationLogMeta.result_labels = normalized.result_labels;
-      operationLogMeta.page_size_options = normalized.page_size_options;
-      operationLogMeta.default_recent_days = normalized.default_recent_days;
-      operationLogMeta.pagination_mode = normalized.pagination_mode;
-      const availableSizes = operationLogPageSizeOptions.value;
-      if (!availableSizes.includes(Number(operationLogPagination.pageSize))) {
-        operationLogPagination.pageSize = availableSizes[0] || LIST_PAGE_SIZE;
-      }
-    } catch (err) {
-      notifyError(err);
-    } finally {
-      operationLogMeta.loaded = true;
-    }
-  };
-
-  const loadOperationLogs = async (force = false, cursor = "", page = 1) => {
-    if (dataLoading.operationLogs) return;
-    const targetCursor = String(cursor || "");
-    if (
-      !force &&
-      dataLoaded.operationLogs &&
-      targetCursor === String(operationLogPagination.cursor || "")
-    ) {
-      return;
-    }
-    operationLogsQueried.value = true;
-    dataLoading.operationLogs = true;
-    try {
-      const payload = await request(
-        withQuery(`${adminBase}/operation-logs/`, {
-          page_size: operationLogPagination.pageSize,
-          cursor: targetCursor,
-          ...operationLogFilters,
-        })
-      );
-      operationLogs.value = Array.isArray(payload?.results)
-        ? payload.results
-        : Array.isArray(payload)
-          ? payload
-          : [];
-      const targetPage = Math.max(Number(page || 1), 1);
-      operationLogPagination.page = targetPage;
-      operationLogPagination.next = payload?.next || "";
-      operationLogPagination.previous = payload?.previous || "";
-      operationLogPagination.cursor = targetCursor;
-      operationLogPageCursorMap.value[targetPage] = targetCursor;
-      const previousCursor = cursorFromLink(payload?.previous || "");
-      if (targetPage > 1 && previousCursor) {
-        operationLogPageCursorMap.value[targetPage - 1] = previousCursor;
-      }
-      const nextCursor = cursorFromLink(payload?.next || "");
-      if (nextCursor) {
-        operationLogPageCursorMap.value[targetPage + 1] = nextCursor;
-      } else {
-        Object.keys(operationLogPageCursorMap.value).forEach((key) => {
-          const keyNum = Number(key);
-          if (Number.isFinite(keyNum) && keyNum > targetPage) {
-            delete operationLogPageCursorMap.value[keyNum];
-          }
-        });
-      }
-      dataLoaded.operationLogs = true;
-    } catch (err) {
-      notifyError(err);
-    } finally {
-      dataLoading.operationLogs = false;
-    }
-  };
-
-  const loadApplicationOperationLogs = async (applicationId) => {
-    if (!applicationId) {
-      applicationOperationLogs.value = [];
-      return;
-    }
-    await loadOperationLogMeta();
-    applicationLogsLoading.value = true;
-    try {
-      const payload = await request(
-        withQuery(`${adminBase}/operation-logs/`, {
-          application_id: applicationId,
-          page: 1,
-          page_size: 20,
-        })
-      );
-      applicationOperationLogs.value = Array.isArray(payload?.results)
-        ? payload.results
-        : Array.isArray(payload)
-          ? payload
-          : [];
-    } catch (err) {
-      notifyError(err);
-      applicationOperationLogs.value = [];
-    } finally {
-      applicationLogsLoading.value = false;
-    }
-  };
+  const {
+    loadOperationLogMeta,
+    loadOperationLogs,
+    loadApplicationOperationLogs,
+  } = createOperationLogLoaders({
+    request,
+    adminBase,
+    notifyError,
+    operationLogMeta,
+    operationLogPageSizeOptions,
+    operationLogPagination,
+    operationLogFilters,
+    operationLogs,
+    operationLogPageCursorMap,
+    operationLogsQueried,
+    dataLoaded,
+    dataLoading,
+    applicationOperationLogs,
+    applicationLogsLoading,
+  });
 
   const loadUsers = async (force = false) => {
     if (!userProfile.is_superuser) return;
@@ -364,6 +288,18 @@ export const useAdminDataLoaders = ({
     userProfile.region_name = data?.profile?.region_name || "";
     userProfile.region_id = data?.profile?.region ?? null;
     userProfile.is_superuser = data?.is_superuser || false;
+    try {
+      localStorage.setItem(
+        "admin_is_superuser",
+        userProfile.is_superuser ? "true" : "false"
+      );
+      localStorage.setItem(
+        "admin_can_view_all",
+        userProfile.can_view_all ? "true" : "false"
+      );
+    } catch {
+      // ignore storage errors
+    }
     if (!userProfile.can_view_all && userProfile.region_id) {
       jobForm.region = userProfile.region_id;
     }

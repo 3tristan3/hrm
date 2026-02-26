@@ -5,7 +5,7 @@
     <div class="card-header interview-header">
       <div>
         <h3>拟面试人员</h3>
-        <p class="header-sub">显示 {{ filteredInterviewCandidates.length }} / {{ interviewCandidates.length }} 人</p>
+        <p class="header-sub">显示 {{ filteredInterviewCandidates.length }} / {{ interviewTotalCount }} 人</p>
       </div>
       <div class="applications-header-actions">
         <span class="chip subtle">已选 {{ selectedInterviewCount }} 人</span>
@@ -117,6 +117,44 @@
                   </span>
                 </td>
                 <td class="action-cell">
+                  <div class="sms-status-shell" :class="`is-${smsStatusShell(item).status}`">
+                    <button
+                      type="button"
+                      class="sms-status-dot-btn"
+                      aria-label="查看短信状态"
+                    >
+                      <span class="sms-status-dot" aria-hidden="true"></span>
+                    </button>
+                    <div class="sms-status-popover">
+                      <div class="sms-status-popover-title">短信发送状态</div>
+                      <div class="sms-status-popover-row">
+                        <span>状态</span>
+                        <span class="sms-status-pill" :class="`is-${smsStatusShell(item).status}`">
+                          {{ smsStatusShell(item).label }}
+                        </span>
+                      </div>
+                      <div class="sms-status-popover-row">
+                        <span>时间</span>
+                        <span>{{ smsStatusTime(item) }}</span>
+                      </div>
+                      <div class="sms-status-popover-row">
+                        <span>号码</span>
+                        <span>{{ smsStatusShell(item).phone || "-" }}</span>
+                      </div>
+                      <div v-if="smsStatusShell(item).error" class="sms-status-popover-error">
+                        {{ smsStatusShell(item).error }}
+                      </div>
+                      <div v-if="smsStatusShell(item).retryCount > 0" class="sms-status-popover-row">
+                        <span>重试次数</span>
+                        <span>{{ smsStatusShell(item).retryCount }} 次</span>
+                      </div>
+                      <div v-if="smsCanRetry(item)" class="sms-status-popover-actions">
+                        <button type="button" class="sms-status-retry-btn" @click.stop="retrySms(item)">
+                          失败重发
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <button
                     class="btn btn-xs btn-primary"
                     type="button"
@@ -141,6 +179,13 @@
         </div>
         <div v-else class="empty-state">暂无拟面试人员</div>
       </div>
+      <ListPaginationBar
+        :pagination="pagination"
+        :loading="loading"
+        :page-size-options="pageSizeOptions"
+        @change-page="$emit('change-page', $event)"
+        @change-page-size="$emit('change-page-size', $event)"
+      />
     </div>
   </div>
 
@@ -165,7 +210,7 @@
         </div>
       </div>
       <div class="job-modal-body">
-        <form class="form-compact" @submit.prevent="$emit('save-schedule')">
+        <form class="form-compact" @submit.prevent="onScheduleSubmit">
           <div class="form-grid-2">
             <div class="form-group">
               <label>候选人</label>
@@ -182,6 +227,7 @@
               v-model="interviewScheduleForm.interview_at"
               :min-date="todayDate"
               :days="21"
+              default-time="09:00"
               start-time="00:00"
               end-time="23:55"
               :step-minutes="5"
@@ -189,15 +235,34 @@
           </div>
           <div class="form-group full-width">
             <label>面试官</label>
-            <input v-model.trim="interviewScheduleForm.interviewer" placeholder="李经理 / 王主管" />
+            <input v-model.trim="interviewScheduleForm.interviewer" />
           </div>
           <div class="form-group full-width">
             <label>面试地点 / 链接</label>
-            <input v-model.trim="interviewScheduleForm.interview_location" placeholder="如：总部A座301 / 腾讯会议链接" />
+            <input v-model.trim="interviewScheduleForm.interview_location" placeholder="如：xx地点 / 腾讯会议链接" />
           </div>
           <div class="form-group full-width">
             <label>备注</label>
             <textarea v-model.trim="interviewScheduleForm.note" rows="3"></textarea>
+          </div>
+          <div class="form-group full-width">
+            <div class="job-switch sms-shell-switch">
+              <div class="switch-group">
+                <div class="switch-title">发送面试通知短信</div>
+              </div>
+              <UISwitch
+                v-model="interviewScheduleForm.send_sms"
+                :label="interviewScheduleForm.send_sms ? '已开启' : '已关闭'"
+              />
+            </div>
+            <div v-if="interviewScheduleForm.send_sms" class="sms-shell-card">
+              <div class="sms-shell-head">
+                <span class="panel-pill subtle">短信预览</span>
+                <span class="sms-shell-recipient">接收号码：{{ interviewScheduleForm.phone || "未填写" }}</span>
+              </div>
+              <pre class="sms-shell-preview">{{ smsPreviewText }}</pre>
+              <div class="sms-shell-footnote">预估字数：{{ smsPreviewText.length }} 字</div>
+            </div>
           </div>
           <div class="form-actions schedule-form-actions">
             <div class="schedule-form-actions-left">
@@ -214,7 +279,13 @@
             <div class="schedule-form-actions-right">
               <button type="button" class="btn btn-default" @click="$emit('close-schedule')">取消</button>
               <button type="submit" class="btn btn-primary" :disabled="scheduleSaving">
-                {{ scheduleSaving ? "保存中..." : "保存安排" }}
+                {{
+                  scheduleSaving
+                    ? "保存中..."
+                    : interviewScheduleForm.send_sms
+                      ? "保存并发送短信"
+                      : "保存安排"
+                }}
               </button>
             </div>
           </div>
@@ -281,10 +352,16 @@
 import { computed } from "vue";
 import DetailNameButton from "./DetailNameButton.vue";
 import DateTimeSlidePicker from "./DateTimeSlidePicker.vue";
+import ListPaginationBar from "./ListPaginationBar.vue";
+import UISwitch from "./UISwitch.vue";
+import { useInterviewSmsShell } from "../composables/useInterviewSmsShell";
 
 const props = defineProps({
   filteredInterviewCandidates: { type: Array, default: () => [] },
   interviewCandidates: { type: Array, default: () => [] },
+  pagination: { type: Object, default: () => ({ page: 1, pageSize: 30, count: 0 }) },
+  pageSizeOptions: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false },
   selectedInterviewCount: { type: Number, default: 0 },
   selectedInterviewIds: { type: Array, default: () => [] },
   isAllVisibleInterviewsSelected: { type: Boolean, default: false },
@@ -315,9 +392,12 @@ const emit = defineEmits([
   "refresh",
   "batch-remove",
   "reset-filters",
+  "change-page",
+  "change-page-size",
   "toggle-time-sort",
   "open-schedule",
   "open-result",
+  "retry-sms",
   "open-detail",
   "remove",
   "close-schedule",
@@ -340,6 +420,23 @@ const localIsAllVisibleInterviewsSelected = computed({
   get: () => props.isAllVisibleInterviewsSelected,
   set: (value) => emit("update:isAllVisibleInterviewsSelected", value),
 });
+
+const interviewTotalCount = computed(() =>
+  Math.max(
+    Number(props.pagination?.count || 0),
+    Array.isArray(props.interviewCandidates) ? props.interviewCandidates.length : 0
+  )
+);
+const { smsPreviewText, smsStatusShell, smsStatusTime, smsCanRetry, retrySms } =
+  useInterviewSmsShell({
+    interviewScheduleForm: props.interviewScheduleForm,
+    formatTime: props.formatTime,
+    emit,
+  });
+
+const onScheduleSubmit = () => {
+  emit("save-schedule");
+};
 
 const formatDateOffset = (offsetDays = 0) => {
   const date = new Date();
