@@ -35,6 +35,8 @@ def request_id_from_request(request) -> str:
         return ""
     # 优先使用网关传递的请求ID，便于跨服务串联排查。
     return (
+        getattr(request, "request_id", "")
+        or
         request.headers.get("X-Request-ID")
         or request.META.get("HTTP_X_REQUEST_ID")
         or request.META.get("REQUEST_ID")

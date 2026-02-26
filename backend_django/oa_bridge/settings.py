@@ -30,6 +30,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "application.request_logging.RequestLoggingMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -172,3 +173,38 @@ default_field_mapping = {
 OA_FIELD_MAPPING = get_json("OA_FIELD_MAPPING", default_field_mapping)
 if not isinstance(OA_FIELD_MAPPING, dict):
     OA_FIELD_MAPPING = default_field_mapping
+
+LOG_LEVEL = str(os.getenv("LOG_LEVEL", "INFO") or "INFO").strip().upper()
+REQUEST_LOG_LEVEL = str(os.getenv("REQUEST_LOG_LEVEL", LOG_LEVEL) or LOG_LEVEL).strip().upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "default",
+        }
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "application.request": {
+            "handlers": ["console"],
+            "level": REQUEST_LOG_LEVEL,
+            "propagate": False,
+        },
+        "application.api_views.public": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
