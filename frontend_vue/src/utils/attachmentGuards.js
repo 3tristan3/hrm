@@ -29,6 +29,14 @@ export const validateAttachmentFiles = ({
   maxFileMb,
   maxTotalMb,
 }) => {
+  const emptyFile = incomingFiles.find((file) => fileSize(file) <= 0);
+  if (emptyFile) {
+    return {
+      ok: false,
+      error: `文件“${emptyFile.name}”是空文件，请重新导出后上传`,
+    };
+  }
+
   const maxFileBytes = Number(maxFileMb || 0) * BYTES_PER_MB;
   const maxTotalBytes = Number(maxTotalMb || 0) * BYTES_PER_MB;
 

@@ -22,6 +22,15 @@ export const createApplicationSubmitter = ({
   openModal,
   scrollToFirstError,
 }) => {
+  const extractUploadErrorMessage = (body, statusCode) => {
+    const details = body?.details;
+    const fileDetails = Array.isArray(details?.file) ? details.file : [];
+    const firstFileMessage = fileDetails.length ? String(fileDetails[0]) : "";
+    if (firstFileMessage) return firstFileMessage;
+    if (typeof body?.error === "string" && body.error.trim()) return body.error.trim();
+    return `HTTP ${statusCode}`;
+  };
+
   const uploadAttachment = async (appId, token, category, files) => {
     if (!files || (Array.isArray(files) && files.length === 0)) return;
     const formData = new FormData();
@@ -49,7 +58,7 @@ export const createApplicationSubmitter = ({
       if (response.status === 413) {
         throw new Error("附件上传失败：文件过大（网关限制），请压缩文件后重试");
       }
-      const reason = body?.error ? String(body.error) : `HTTP ${response.status}`;
+      const reason = extractUploadErrorMessage(body, response.status);
       throw new Error(`附件上传失败：${reason}`);
     }
   };
