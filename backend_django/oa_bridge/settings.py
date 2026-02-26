@@ -154,6 +154,14 @@ OA_CREATOR_ID = os.getenv("OA_CREATOR_ID", "")
 OA_REQUEST_TIMEOUT = get_int("OA_REQUEST_TIMEOUT", 10)
 OA_REQUEST_NAME_TEMPLATE = os.getenv("OA_REQUEST_NAME_TEMPLATE", "{name} 应聘申请")
 
+INTERVIEW_SMS_ENABLED = get_bool("INTERVIEW_SMS_ENABLED", False)
+INTERVIEW_SMS_PROVIDER = str(os.getenv("INTERVIEW_SMS_PROVIDER", "aliyun") or "aliyun").strip().lower()
+ALIYUN_SMS_REGION_ID = str(os.getenv("ALIYUN_SMS_REGION_ID", "cn-hangzhou") or "cn-hangzhou").strip()
+ALIYUN_SMS_ACCESS_KEY_ID = str(os.getenv("ALIYUN_SMS_ACCESS_KEY_ID", "") or "").strip()
+ALIYUN_SMS_ACCESS_KEY_SECRET = str(os.getenv("ALIYUN_SMS_ACCESS_KEY_SECRET", "") or "").strip()
+ALIYUN_SMS_SIGN_NAME = str(os.getenv("ALIYUN_SMS_SIGN_NAME", "") or "").strip()
+ALIYUN_SMS_TEMPLATE_CODE = str(os.getenv("ALIYUN_SMS_TEMPLATE_CODE", "") or "").strip()
+
 default_field_mapping = {
     "name": "xm",
     "phone": "dh",

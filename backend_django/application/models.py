@@ -197,6 +197,17 @@ class InterviewCandidate(models.Model):
         (RESULT_REJECT, "淘汰"),
     ]
 
+    SMS_STATUS_IDLE = "idle"
+    SMS_STATUS_SENDING = "sending"
+    SMS_STATUS_SUCCESS = "success"
+    SMS_STATUS_FAILED = "failed"
+    SMS_STATUS_CHOICES = [
+        (SMS_STATUS_IDLE, "未发送"),
+        (SMS_STATUS_SENDING, "发送中"),
+        (SMS_STATUS_SUCCESS, "发送成功"),
+        (SMS_STATUS_FAILED, "发送失败"),
+    ]
+
     application = models.OneToOneField(
         Application,
         related_name="interview_candidate",
@@ -217,6 +228,20 @@ class InterviewCandidate(models.Model):
     is_hired = models.BooleanField("已确认入职", default=False)
     hired_at = models.DateTimeField("确认入职时间", null=True, blank=True)
     note = models.TextField("备注", blank=True, default="")
+    sms_status = models.CharField(
+        "短信状态",
+        max_length=20,
+        choices=SMS_STATUS_CHOICES,
+        default=SMS_STATUS_IDLE,
+    )
+    sms_retry_count = models.PositiveSmallIntegerField("短信重试次数", default=0)
+    sms_last_attempt_at = models.DateTimeField("短信最近尝试时间", null=True, blank=True)
+    sms_sent_at = models.DateTimeField("短信发送成功时间", null=True, blank=True)
+    sms_updated_at = models.DateTimeField("短信状态更新时间", null=True, blank=True)
+    sms_error = models.TextField("短信失败原因", blank=True, default="")
+    sms_provider_code = models.CharField("短信供应商状态码", max_length=50, blank=True, default="")
+    sms_provider_message = models.CharField("短信供应商返回信息", max_length=255, blank=True, default="")
+    sms_message_id = models.CharField("短信消息ID", max_length=100, blank=True, default="")
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
 

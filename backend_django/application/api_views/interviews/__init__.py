@@ -1,9 +1,27 @@
 """面试域视图导出。"""
 
-from .query import _InterviewCandidateAdminQuerysetMixin, AdminInterviewCandidateListView, AdminInterviewMetaView, _InterviewOutcomeCandidateListView, AdminPassedCandidateListView, AdminTalentPoolCandidateListView, AdminInterviewCandidateDetailView
-from .actions import AdminInterviewCandidateScheduleView, AdminInterviewCandidateCancelScheduleView, AdminInterviewCandidateResultView
-from .batch import AdminInterviewCandidateBatchAddView, AdminInterviewCandidateBatchRemoveView, AdminTalentPoolCandidateBatchAddView, AdminTalentPoolCandidateBatchToInterviewView
+from .actions import (
+    AdminInterviewCandidateCancelScheduleView,
+    AdminInterviewCandidateResendSmsView,
+    AdminInterviewCandidateResultView,
+    AdminInterviewCandidateScheduleView,
+)
+from .batch import (
+    AdminInterviewCandidateBatchAddView,
+    AdminInterviewCandidateBatchRemoveView,
+    AdminTalentPoolCandidateBatchAddView,
+    AdminTalentPoolCandidateBatchToInterviewView,
+)
 from .hire import AdminPassedCandidateBatchConfirmHireView
+from .query import (
+    AdminInterviewCandidateDetailView,
+    AdminInterviewCandidateListView,
+    AdminInterviewMetaView,
+    AdminPassedCandidateListView,
+    AdminTalentPoolCandidateListView,
+    _InterviewCandidateAdminQuerysetMixin,
+    _InterviewOutcomeCandidateListView,
+)
 
 __all__ = [
     "_InterviewCandidateAdminQuerysetMixin",
@@ -16,6 +34,7 @@ __all__ = [
     "AdminInterviewCandidateScheduleView",
     "AdminInterviewCandidateCancelScheduleView",
     "AdminInterviewCandidateResultView",
+    "AdminInterviewCandidateResendSmsView",
     "AdminInterviewCandidateBatchAddView",
     "AdminInterviewCandidateBatchRemoveView",
     "AdminTalentPoolCandidateBatchAddView",

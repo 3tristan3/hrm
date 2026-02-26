@@ -70,6 +70,7 @@ from ..serializers import (
     InterviewCandidateListSerializer,
     InterviewPassedCandidateListSerializer,
     InterviewCandidateResultSerializer,
+    InterviewCandidateResendSmsSerializer,
     InterviewCandidateScheduleSerializer,
     JobAdminSerializer,
     JobBatchStatusSerializer,

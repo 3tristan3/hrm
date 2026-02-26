@@ -43,10 +43,19 @@ class _InterviewCandidateAdminQuerysetMixin(AdminScopedMixin):
 
 class AdminInterviewCandidateListView(_InterviewCandidateAdminQuerysetMixin, generics.ListAPIView):
     serializer_class = InterviewCandidateListSerializer
+    pagination_class = AdminResultListPagination
 
     def get_queryset(self):
         # 拟面试池仅展示流程中的候选人，已出结果（已完成）移出该列表。
         return super().get_queryset().exclude(status=InterviewCandidate.STATUS_COMPLETED)
+
+    def list(self, request: Request, *args, **kwargs):
+        """兼容历史返回：仅当前端传 page/page_size 时启用分页结构。"""
+        if "page" not in request.query_params and "page_size" not in request.query_params:
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        return super().list(request, *args, **kwargs)
 
 class AdminInterviewMetaView(AdminScopedMixin, APIView):
     """输出面试模块元数据，供前端统一常量和选项。"""

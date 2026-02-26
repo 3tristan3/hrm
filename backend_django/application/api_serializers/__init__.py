@@ -3,7 +3,7 @@
 from .shared import build_public_file_url
 from .public import RegionFieldSerializer, RegionSerializer, JobSerializer, ApplicationCreateSerializer, ApplicationSerializer, ApplicationAttachmentSerializer, ApplicationAttachmentUploadSerializer
 from .admin import RegionAdminSerializer, RegionFieldAdminSerializer, JobAdminSerializer, JobBatchStatusSerializer, ApplicationAdminPhotoMixin, ApplicationAdminListSerializer, ApplicationAdminSerializer
-from .interview import InterviewCandidateBatchAddSerializer, InterviewCandidateBatchRemoveSerializer, InterviewCandidateBatchConfirmHireSerializer, InterviewCandidateListSerializer, InterviewPassedCandidateListSerializer, InterviewCandidateScheduleSerializer, InterviewCandidateCancelScheduleSerializer, InterviewCandidateResultSerializer
+from .interview import InterviewCandidateBatchAddSerializer, InterviewCandidateBatchRemoveSerializer, InterviewCandidateBatchConfirmHireSerializer, InterviewCandidateListSerializer, InterviewPassedCandidateListSerializer, InterviewCandidateScheduleSerializer, InterviewCandidateCancelScheduleSerializer, InterviewCandidateResultSerializer, InterviewCandidateResendSmsSerializer
 from .logs import OperationLogListSerializer, OperationLogDetailSerializer, OperationLogQuerySerializer
 from .auth import RegisterSerializer, LoginSerializer, UserProfileSerializer, MeSerializer, AdminUserSerializer, AdminPasswordResetSerializer, ChangePasswordSerializer
 
@@ -31,6 +31,7 @@ __all__ = [
     "InterviewCandidateScheduleSerializer",
     "InterviewCandidateCancelScheduleSerializer",
     "InterviewCandidateResultSerializer",
+    "InterviewCandidateResendSmsSerializer",
     "OperationLogListSerializer",
     "OperationLogDetailSerializer",
     "OperationLogQuerySerializer",

@@ -1,5 +1,6 @@
 """面试接口测试：覆盖拟面试/人才库流转与权限边界的关键行为。"""
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -7,6 +8,7 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
+from .interview_sms import SmsDispatchResult
 from .models import Application, InterviewCandidate, Job, OperationLog, Region, UserProfile
 
 
@@ -54,6 +56,117 @@ class InterviewMetaApiTests(APITestCase):
         payload = response.json()
         self.assertEqual(payload.get("error_code"), "INTERVIEW_NOT_SCHEDULED_FOR_RESULT")
 
+    @mock.patch("application.api_views.interviews.actions_schedule.dispatch_interview_schedule_sms")
+    def test_schedule_with_send_sms_calls_dispatch_and_returns_sms_payload(self, mocked_dispatch):
+        candidate = self._create_candidate("短信候选人", "13800001119")
+        interview_at = timezone.now() + timedelta(days=1)
+
+        def _dispatch_side_effect(candidate_id, is_retry=False):
+            self.assertFalse(is_retry)
+            self.assertEqual(candidate_id, candidate.id)
+            item = InterviewCandidate.objects.select_related("application", "application__job").get(id=candidate_id)
+            item.sms_status = InterviewCandidate.SMS_STATUS_SUCCESS
+            item.sms_sent_at = timezone.now()
+            item.sms_updated_at = timezone.now()
+            item.sms_provider_code = "OK"
+            item.sms_provider_message = "OK"
+            item.sms_message_id = "biz-demo-1"
+            item.sms_error = ""
+            item.save(
+                update_fields=[
+                    "sms_status",
+                    "sms_sent_at",
+                    "sms_updated_at",
+                    "sms_provider_code",
+                    "sms_provider_message",
+                    "sms_message_id",
+                    "sms_error",
+                    "updated_at",
+                ]
+            )
+            return item, SmsDispatchResult(success=True, provider_code="OK", provider_message="OK", biz_id="biz-demo-1")
+
+        mocked_dispatch.side_effect = _dispatch_side_effect
+
+        response = self.client.post(
+            reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id}),
+            data={
+                "interview_at": interview_at.isoformat(),
+                "interviewer": "面试官A",
+                "interview_location": "线上会议",
+                "send_sms": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("message"), "面试安排已保存，短信已发送")
+        self.assertTrue(payload.get("sms", {}).get("success"))
+        mocked_dispatch.assert_called_once_with(candidate.id, is_retry=False)
+
+        updated = InterviewCandidate.objects.get(id=candidate.id)
+        self.assertEqual(updated.status, InterviewCandidate.STATUS_SCHEDULED)
+        self.assertEqual(updated.sms_status, InterviewCandidate.SMS_STATUS_SUCCESS)
+
+    @mock.patch("application.api_views.interviews.actions_sms.dispatch_interview_schedule_sms")
+    def test_resend_sms_endpoint_records_failed_log_result(self, mocked_dispatch):
+        interview_at = timezone.now() + timedelta(hours=4)
+        candidate = self._create_candidate(
+            "重发候选人",
+            "13800001120",
+            status=InterviewCandidate.STATUS_SCHEDULED,
+            interview_at=interview_at,
+            interviewer="面试官B",
+            interview_location="总部A座301",
+            sms_status=InterviewCandidate.SMS_STATUS_FAILED,
+            sms_error="上次发送失败",
+        )
+
+        def _dispatch_side_effect(candidate_id, is_retry=False):
+            self.assertTrue(is_retry)
+            self.assertEqual(candidate_id, candidate.id)
+            item = InterviewCandidate.objects.select_related("application", "application__job").get(id=candidate_id)
+            item.sms_status = InterviewCandidate.SMS_STATUS_FAILED
+            item.sms_updated_at = timezone.now()
+            item.sms_error = "网关限流"
+            item.sms_retry_count = (item.sms_retry_count or 0) + 1
+            item.sms_provider_code = "isv.BUSINESS_LIMIT_CONTROL"
+            item.sms_provider_message = "触发业务流控限制"
+            item.save(
+                update_fields=[
+                    "sms_status",
+                    "sms_updated_at",
+                    "sms_error",
+                    "sms_retry_count",
+                    "sms_provider_code",
+                    "sms_provider_message",
+                    "updated_at",
+                ]
+            )
+            return item, SmsDispatchResult(
+                success=False,
+                provider_code="isv.BUSINESS_LIMIT_CONTROL",
+                provider_message="触发业务流控限制",
+            )
+
+        mocked_dispatch.side_effect = _dispatch_side_effect
+
+        response = self.client.post(
+            reverse("admin-interview-candidate-resend-sms", kwargs={"pk": candidate.id}),
+            data={},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("message"), "短信重发失败")
+        self.assertFalse(payload.get("sms", {}).get("success"))
+        mocked_dispatch.assert_called_once_with(candidate.id, is_retry=True)
+
+        log = OperationLog.objects.filter(action="RESEND_INTERVIEW_SMS").first()
+        self.assertIsNotNone(log)
+        self.assertEqual(log.result, OperationLog.RESULT_FAILED)
+
     def _create_candidate(self, name, phone, *, status=None, result=None, region=None, **kwargs):
         candidate_region = region or self.region
         job = Job.objects.create(region=candidate_region, title=f"{name}-岗位")
@@ -93,6 +206,20 @@ class InterviewMetaApiTests(APITestCase):
         returned_ids = {item["id"] for item in payload}
         self.assertIn(pending_candidate.id, returned_ids)
         self.assertEqual(len(returned_ids), 1)
+
+    def test_interview_pool_supports_paginated_response_when_requested(self):
+        self._create_candidate("拟面试候选人A", "13800002231")
+        self._create_candidate("拟面试候选人B", "13800002232")
+
+        response = self.client.get(
+            f"{reverse('admin-interview-candidates')}?page=1&page_size=1"
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("count", payload)
+        self.assertIn("results", payload)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(len(payload["results"]), 1)
 
     def test_talent_pool_contains_only_rejected_candidates(self):
         reject_candidate = self._create_candidate(

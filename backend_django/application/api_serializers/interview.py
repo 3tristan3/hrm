@@ -87,6 +87,15 @@ class InterviewCandidateListSerializer(serializers.ModelSerializer):
             "result_note",
             "result_at",
             "note",
+            "sms_status",
+            "sms_retry_count",
+            "sms_last_attempt_at",
+            "sms_sent_at",
+            "sms_updated_at",
+            "sms_error",
+            "sms_provider_code",
+            "sms_provider_message",
+            "sms_message_id",
             "photo_url",
             "created_at",
             "updated_at",
@@ -220,6 +229,7 @@ class InterviewCandidateScheduleSerializer(serializers.Serializer):
     interviewer = serializers.CharField(max_length=100, required=False, allow_blank=True)
     interview_location = serializers.CharField(max_length=200, required=False, allow_blank=True)
     note = serializers.CharField(required=False, allow_blank=True)
+    send_sms = serializers.BooleanField(required=False, default=False)
 
     def validate_interview_at(self, value):
         if value < timezone.now():
@@ -237,3 +247,7 @@ class InterviewCandidateResultSerializer(serializers.Serializer):
     result = serializers.ChoiceField(choices=InterviewCandidate.RESULT_CHOICES)
     score = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
     result_note = serializers.CharField(required=False, allow_blank=True)
+
+
+class InterviewCandidateResendSmsSerializer(serializers.Serializer):
+    """失败重发短信入参。"""
