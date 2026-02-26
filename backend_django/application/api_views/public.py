@@ -1,6 +1,7 @@
 """按职责拆分的视图模块。"""
 import logging
 
+from . import shared as shared_views
 from .shared import *
 
 logger = logging.getLogger(__name__)
@@ -200,8 +201,8 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        max_file_mb, max_total_mb, max_file_bytes, max_total_bytes = _resolve_attachment_limits()
-        oversized_files = [upload.name for upload in files if _safe_file_size(upload) > max_file_bytes]
+        max_file_mb, max_total_mb, max_file_bytes, max_total_bytes = shared_views._resolve_attachment_limits()
+        oversized_files = [upload.name for upload in files if shared_views._safe_file_size(upload) > max_file_bytes]
         if oversized_files:
             self._log_upload_failure(
                 request,
@@ -222,13 +223,15 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        incoming_total_bytes = sum(_safe_file_size(upload) for upload in files)
+        incoming_total_bytes = sum(shared_views._safe_file_size(upload) for upload in files)
         existing_attachments = list(application.attachments.all())
-        existing_total_bytes = sum(_safe_file_size(item.file) for item in existing_attachments)
+        existing_total_bytes = sum(shared_views._safe_file_size(item.file) for item in existing_attachments)
         replaced_bytes = 0
         if category != "other":
             replaced_bytes = sum(
-                _safe_file_size(item.file) for item in existing_attachments if item.category == category
+                shared_views._safe_file_size(item.file)
+                for item in existing_attachments
+                if item.category == category
             )
         projected_total_bytes = max(existing_total_bytes - replaced_bytes, 0) + incoming_total_bytes
         if projected_total_bytes > max_total_bytes:
