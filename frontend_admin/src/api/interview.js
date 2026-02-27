@@ -70,12 +70,11 @@ export const createInterviewApi = ({ adminBase, request }) => ({
       body: JSON.stringify({ interview_candidate_ids: candidateIds }),
     });
   },
-  async batchConfirmHires(candidateIds, pushTargets = []) {
+  async batchConfirmHires(candidateIds) {
     return request(`${adminBase}/passed-candidates/batch-confirm-hire/`, {
       method: "POST",
       body: JSON.stringify({
         interview_candidate_ids: candidateIds,
-        push_targets: pushTargets,
       }),
     });
   },

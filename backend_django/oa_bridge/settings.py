@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-from .env_utils import get_bool, get_int, get_json, get_list
+from .env_utils import get_bool, get_int, get_list
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -149,11 +149,18 @@ if get_bool("USE_X_FORWARDED_PROTO", True):
 SESSION_COOKIE_SECURE = get_bool("SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = get_bool("CSRF_COOKIE_SECURE", not DEBUG)
 
-OA_API_URL = os.getenv("OA_API_URL", "")
-OA_WORKFLOW_ID = os.getenv("OA_WORKFLOW_ID", "")
-OA_CREATOR_ID = os.getenv("OA_CREATOR_ID", "")
-OA_REQUEST_TIMEOUT = get_int("OA_REQUEST_TIMEOUT", 10)
-OA_REQUEST_NAME_TEMPLATE = os.getenv("OA_REQUEST_NAME_TEMPLATE", "{name} 应聘申请")
+OA_ENABLED = get_bool("OA_ENABLED", False)
+OA_BASE_URL = str(os.getenv("OA_BASE_URL", "") or "").strip()
+OA_APP_ID = str(os.getenv("OA_APP_ID", "") or "").strip()
+OA_SECRIT = str(os.getenv("OA_SECRIT", "") or "").strip()
+OA_SPK = str(os.getenv("OA_SPK", "") or "").strip()
+OA_USER_ID = str(os.getenv("OA_USER_ID", "") or "").strip()
+OA_WORKFLOW_ID = str(os.getenv("OA_WORKFLOW_ID", "") or "").strip()
+OA_TOKEN_TTL_SECONDS = get_int("OA_TOKEN_TTL_SECONDS", 1800)
+OA_REQUEST_TIMEOUT_SECONDS = get_int("OA_REQUEST_TIMEOUT_SECONDS", 10)
+OA_REQUEST_NAME_TEMPLATE = str(os.getenv("OA_REQUEST_NAME_TEMPLATE", "入职确认-{name}") or "入职确认-{name}")
+OA_HIRE_NAME_FIELD = str(os.getenv("OA_HIRE_NAME_FIELD", "xm") or "xm").strip()
+OA_HIRE_PHONE_FIELD = str(os.getenv("OA_HIRE_PHONE_FIELD", "sjh") or "sjh").strip()
 
 INTERVIEW_SMS_ENABLED = get_bool("INTERVIEW_SMS_ENABLED", False)
 INTERVIEW_SMS_PROVIDER = str(os.getenv("INTERVIEW_SMS_PROVIDER", "aliyun") or "aliyun").strip().lower()
@@ -162,17 +169,6 @@ ALIYUN_SMS_ACCESS_KEY_ID = str(os.getenv("ALIYUN_SMS_ACCESS_KEY_ID", "") or "").
 ALIYUN_SMS_ACCESS_KEY_SECRET = str(os.getenv("ALIYUN_SMS_ACCESS_KEY_SECRET", "") or "").strip()
 ALIYUN_SMS_SIGN_NAME = str(os.getenv("ALIYUN_SMS_SIGN_NAME", "") or "").strip()
 ALIYUN_SMS_TEMPLATE_CODE = str(os.getenv("ALIYUN_SMS_TEMPLATE_CODE", "") or "").strip()
-
-default_field_mapping = {
-    "name": "xm",
-    "phone": "dh",
-    "email": "email",
-    "apply_position": "gwmc",
-    "work_experience": "gzjl",
-}
-OA_FIELD_MAPPING = get_json("OA_FIELD_MAPPING", default_field_mapping)
-if not isinstance(OA_FIELD_MAPPING, dict):
-    OA_FIELD_MAPPING = default_field_mapping
 
 LOG_LEVEL = str(os.getenv("LOG_LEVEL", "INFO") or "INFO").strip().upper()
 REQUEST_LOG_LEVEL = str(os.getenv("REQUEST_LOG_LEVEL", LOG_LEVEL) or LOG_LEVEL).strip().upper()

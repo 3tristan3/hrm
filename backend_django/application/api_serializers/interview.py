@@ -36,23 +36,12 @@ class InterviewCandidateBatchConfirmHireSerializer(serializers.Serializer):
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
     )
-    push_targets = serializers.ListField(
-        child=serializers.CharField(max_length=50),
-        required=False,
-        allow_empty=True,
-    )
 
     def validate_interview_candidate_ids(self, value):
         unique_ids = list(dict.fromkeys(value))
         if len(unique_ids) > 200:
             raise serializers.ValidationError("单次最多选择 200 条面试通过人员")
         return unique_ids
-
-    def validate_push_targets(self, value):
-        unique_targets = list(dict.fromkeys([str(item).strip() for item in value if str(item).strip()]))
-        if len(unique_targets) > 10:
-            raise serializers.ValidationError("单次最多指定 10 个推送目标")
-        return unique_targets
 
 class InterviewCandidateListSerializer(serializers.ModelSerializer):
     """拟面试人员列表输出，包含应聘主信息和当前面试状态。"""

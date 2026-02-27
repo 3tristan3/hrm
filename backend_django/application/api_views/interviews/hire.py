@@ -1,6 +1,6 @@
 """面试确认入职视图子模块。"""
 from .shared import *
-from ...hire_integration import dispatch_hire_confirmation
+from ...hire_push_temp import dispatch_temp_hire_push
 from ...offer_status_transition import (
     OfferStatusTransitionError,
     OfferStatusTransitionService,
@@ -19,7 +19,6 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
             )
 
         interview_candidate_ids = serializer.validated_data["interview_candidate_ids"]
-        push_targets = serializer.validated_data.get("push_targets", [])
         region_id = self._user_region_scope()
 
         with transaction.atomic():
@@ -79,16 +78,34 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                 candidate = candidate_map[candidate_id]
                 OfferStatusTransitionService.apply_confirm_hire(candidate, confirmed_at=now)
                 candidate.save(update_fields=["is_hired", "hired_at", "offer_status", "updated_at"])
-                push_result = dispatch_hire_confirmation(candidate, push_targets=push_targets)
                 confirmed += 1
 
                 candidate_audit_rows.append(
                     {
                         "candidate": candidate,
                         "already_confirmed": False,
-                        "push_result": push_result,
                     }
                 )
+
+        for row in candidate_audit_rows:
+            candidate = row["candidate"]
+            row["oa_push"] = dispatch_temp_hire_push(candidate)
+
+        oa_push_summary = {
+            "enabled": any(bool(item.get("oa_push", {}).get("enabled")) for item in candidate_audit_rows),
+            "success": 0,
+            "failed": 0,
+            "skipped": 0,
+        }
+
+        for row in candidate_audit_rows:
+            push_item = row.get("oa_push") or {}
+            if not push_item.get("enabled"):
+                oa_push_summary["skipped"] += 1
+            elif push_item.get("success"):
+                oa_push_summary["success"] += 1
+            else:
+                oa_push_summary["failed"] += 1
 
         for row in candidate_audit_rows:
             candidate = row["candidate"]
@@ -115,8 +132,7 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                     "is_hired": candidate.is_hired,
                     "hired_at": candidate.hired_at.isoformat() if candidate.hired_at else "",
                     "offer_status": candidate.offer_status,
-                    "push_targets": push_targets,
-                    "push_result": row["push_result"] or {},
+                    "oa_push": row.get("oa_push") or {},
                 },
                 application=application,
                 interview_candidate=candidate,
@@ -136,7 +152,7 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                 "confirmed": confirmed,
                 "already_confirmed": already_confirmed,
                 "total": len(interview_candidate_ids),
-                "push_targets": push_targets,
+                "oa_push": oa_push_summary,
             },
         )
 
@@ -145,6 +161,7 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                 "confirmed": confirmed,
                 "already_confirmed": already_confirmed,
                 "total": len(interview_candidate_ids),
+                "oa_push": oa_push_summary,
             }
         )
 
