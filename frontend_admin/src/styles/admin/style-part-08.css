@@ -213,6 +213,14 @@
   .detail-grid { grid-template-columns: 1fr; }
   .detail-attachments-grid { grid-template-columns: 1fr; }
   .card-info-grid { grid-template-columns: 1fr; }
+  .interviewer-row,
+  .interviewer-score-row {
+    grid-template-columns: 1fr;
+  }
+  .interviewer-group-label {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .schedule-form-actions {
     flex-direction: column;
     align-items: stretch;

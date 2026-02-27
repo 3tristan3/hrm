@@ -98,14 +98,14 @@
                   <span :class="['chip', interviewStatusClass(item)]">{{ interviewStatusText(item) }}</span>
                 </td>
                 <td>{{ formatTime(item.first_round_at) }}</td>
-                <td>{{ item.first_round_score ?? "-" }}</td>
-                <td>{{ item.first_round_interviewer || "-" }}</td>
+                <td>{{ formatRoundScore(item.first_round_interviewer_scores, item.first_round_score) }}</td>
+                <td>{{ formatRoundInterviewer(item.first_round_interviewer_scores, item.first_round_interviewer) }}</td>
                 <td>{{ formatTime(item.second_round_at) }}</td>
-                <td>{{ item.second_round_score ?? "-" }}</td>
-                <td>{{ item.second_round_interviewer || "-" }}</td>
+                <td>{{ formatRoundScore(item.second_round_interviewer_scores, item.second_round_score) }}</td>
+                <td>{{ formatRoundInterviewer(item.second_round_interviewer_scores, item.second_round_interviewer) }}</td>
                 <td>{{ formatTime(item.third_round_at) }}</td>
-                <td>{{ item.third_round_score ?? "-" }}</td>
-                <td>{{ item.third_round_interviewer || "-" }}</td>
+                <td>{{ formatRoundScore(item.third_round_interviewer_scores, item.third_round_score) }}</td>
+                <td>{{ formatRoundInterviewer(item.third_round_interviewer_scores, item.third_round_interviewer) }}</td>
               </tr>
             </tbody>
           </table>
@@ -237,4 +237,35 @@ const localIsAllVisibleSelected = computed({
 
 // 列表内统一时间展示
 const formatTime = (value) => (value ? new Date(value).toLocaleString() : "-");
+
+const normalizeScoreRows = (rows = []) =>
+  (rows || [])
+    .map((row) => ({
+      interviewer: String(row?.interviewer || "").trim(),
+      score: row?.score,
+    }))
+    .filter(
+      (row) =>
+        row.interviewer &&
+        Number.isInteger(Number(row.score)) &&
+        Number(row.score) >= 0 &&
+        Number(row.score) <= 100
+    )
+    .map((row) => ({ interviewer: row.interviewer, score: Number(row.score) }));
+
+const formatRoundScore = (rows, fallbackScore) => {
+  const normalizedRows = normalizeScoreRows(rows);
+  if (normalizedRows.length) {
+    return normalizedRows.map((row) => `${row.interviewer}:${row.score}`).join(" / ");
+  }
+  return fallbackScore ?? "-";
+};
+
+const formatRoundInterviewer = (rows, fallbackInterviewer) => {
+  const normalizedRows = normalizeScoreRows(rows);
+  if (normalizedRows.length) {
+    return normalizedRows.map((row) => row.interviewer).join("、");
+  }
+  return fallbackInterviewer || "-";
+};
 </script>

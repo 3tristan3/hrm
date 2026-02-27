@@ -47,9 +47,25 @@ class InterviewFlowServiceTests(TestCase):
         self.assertEqual(candidate.status, InterviewCandidate.STATUS_SCHEDULED)
         self.assertEqual(candidate.interview_round, 1)
         self.assertEqual(candidate.interviewer, "面试官A")
+        self.assertEqual(candidate.interviewers, ["面试官A"])
         self.assertEqual(candidate.interview_location, "会议室1")
         self.assertEqual(candidate.note, "请准时")
         self.assertIsNotNone(candidate.interview_at)
+
+    def test_schedule_supports_multiple_interviewers(self):
+        candidate = self._create_candidate()
+        interview_at = timezone.now() + timedelta(hours=2)
+
+        schedule_interview(
+            candidate,
+            interview_at=interview_at,
+            interviewers=["面试官A", "面试官B", "面试官A"],
+            interview_location="会议室2",
+        )
+        candidate.refresh_from_db()
+
+        self.assertEqual(candidate.interviewer, "面试官A、面试官B")
+        self.assertEqual(candidate.interviewers, ["面试官A", "面试官B"])
 
     def test_next_round_result_then_schedule_advances_round(self):
         candidate = self._create_candidate()
@@ -73,6 +89,7 @@ class InterviewFlowServiceTests(TestCase):
         self.assertEqual(candidate.interview_round, 2)
         self.assertEqual(candidate.result, "")
         self.assertIsNone(candidate.score)
+        self.assertEqual(candidate.interviewer_scores, [])
         self.assertEqual(candidate.result_note, "")
 
     def test_record_pass_result_creates_round_record(self):
@@ -98,6 +115,7 @@ class InterviewFlowServiceTests(TestCase):
         self.assertEqual(round_record.score, 92)
         self.assertEqual(round_record.result, InterviewCandidate.RESULT_PASS)
         self.assertEqual(round_record.interviewer, "面试官A")
+        self.assertEqual(round_record.interviewer_scores, [{"interviewer": "面试官A", "score": 92}])
 
     def test_record_pending_result_keeps_candidate_in_flow(self):
         candidate = self._create_candidate()
@@ -116,6 +134,41 @@ class InterviewFlowServiceTests(TestCase):
         self.assertEqual(candidate.result, InterviewCandidate.RESULT_PENDING)
         self.assertIsNone(candidate.interview_at)
         self.assertEqual(candidate.interviewer, "")
+
+    def test_record_result_with_per_interviewer_scores(self):
+        candidate = self._create_candidate()
+        interview_at = timezone.now() + timedelta(hours=2)
+        schedule_interview(
+            candidate,
+            interview_at=interview_at,
+            interviewers=["面试官A", "面试官B"],
+        )
+
+        record_result(
+            candidate,
+            result=InterviewCandidate.RESULT_PASS,
+            interviewer_scores=[
+                {"interviewer": "面试官A", "score": 88},
+                {"interviewer": "面试官B", "score": 92},
+            ],
+            result_note="双面试官均通过",
+        )
+        candidate.refresh_from_db()
+
+        self.assertEqual(candidate.result, InterviewCandidate.RESULT_PASS)
+        self.assertEqual(candidate.score, 90)
+        self.assertEqual(
+            candidate.interviewer_scores,
+            [
+                {"interviewer": "面试官A", "score": 88},
+                {"interviewer": "面试官B", "score": 92},
+            ],
+        )
+
+        round_record = InterviewRoundRecord.objects.get(candidate=candidate, round_no=1)
+        self.assertEqual(round_record.interviewers, ["面试官A", "面试官B"])
+        self.assertEqual(round_record.interviewer, "面试官A、面试官B")
+        self.assertEqual(round_record.score, 90)
 
     def test_record_next_round_on_round_three_should_fail(self):
         candidate = self._create_candidate(

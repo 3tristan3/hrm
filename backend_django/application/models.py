@@ -220,9 +220,11 @@ class InterviewCandidate(models.Model):
     interview_round = models.PositiveSmallIntegerField("面试轮次", default=1)
     interview_at = models.DateTimeField("面试时间", null=True, blank=True)
     interviewer = models.CharField("面试官", max_length=100, blank=True, default="")
+    interviewers = models.JSONField("面试官列表", default=list, blank=True)
     interview_location = models.CharField("面试地点", max_length=200, blank=True, default="")
     result = models.CharField("面试结果", max_length=20, choices=RESULT_CHOICES, blank=True, default="")
     score = models.PositiveSmallIntegerField("面试评分", null=True, blank=True)
+    interviewer_scores = models.JSONField("面试官评分明细", default=list, blank=True)
     result_note = models.TextField("结果评语", blank=True, default="")
     result_at = models.DateTimeField("结果记录时间", null=True, blank=True)
     is_hired = models.BooleanField("已确认入职", default=False)
@@ -266,7 +268,9 @@ class InterviewRoundRecord(models.Model):
     round_no = models.PositiveSmallIntegerField("面试轮次")
     interview_at = models.DateTimeField("面试时间", null=True, blank=True)
     interviewer = models.CharField("面试官", max_length=100, blank=True, default="")
+    interviewers = models.JSONField("面试官列表", default=list, blank=True)
     score = models.PositiveSmallIntegerField("面试评分", null=True, blank=True)
+    interviewer_scores = models.JSONField("面试官评分明细", default=list, blank=True)
     result = models.CharField(
         "面试结果",
         max_length=20,

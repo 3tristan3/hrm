@@ -1,5 +1,88 @@
 import { toDateTimeLocal } from "../../utils/detailFormatters";
 
+const normalizeInterviewerNames = (values = []) => {
+  const normalized = [];
+  const seen = new Set();
+  (values || []).forEach((raw) => {
+    const name = String(raw || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    normalized.push(name);
+  });
+  return normalized;
+};
+
+const splitLegacyInterviewer = (text) => {
+  let raw = String(text || "").trim();
+  if (!raw) return [];
+  ["、", "，", ";", "；", "/", "|"].forEach((separator) => {
+    raw = raw.replaceAll(separator, ",");
+  });
+  return normalizeInterviewerNames(raw.split(","));
+};
+
+const toScheduleInterviewerRows = (item = {}) => {
+  const names = normalizeInterviewerNames(item.interviewers || []);
+  if (names.length) return names;
+  const legacy = splitLegacyInterviewer(item.interviewer);
+  if (legacy.length) return legacy;
+  return [""];
+};
+
+const toResultScoreRows = (item = {}) => {
+  const rows = Array.isArray(item.interviewer_scores)
+    ? item.interviewer_scores
+        .map((row) => ({
+          interviewer: String(row?.interviewer || "").trim(),
+          score: row?.score ?? null,
+        }))
+        .filter((row) => row.interviewer)
+    : [];
+  if (rows.length) return rows;
+  const names = normalizeInterviewerNames(item.interviewers || []);
+  if (names.length) {
+    if (names.length === 1 && item.score !== null && item.score !== undefined) {
+      return [{ interviewer: names[0], score: item.score }];
+    }
+    return names.map((name) => ({ interviewer: name, score: null }));
+  }
+  const legacyNames = splitLegacyInterviewer(item.interviewer);
+  if (legacyNames.length) {
+    if (legacyNames.length === 1 && item.score !== null && item.score !== undefined) {
+      return [{ interviewer: legacyNames[0], score: item.score }];
+    }
+    return legacyNames.map((name) => ({ interviewer: name, score: null }));
+  }
+  return [{ interviewer: "", score: null }];
+};
+
+const normalizeResultScoreRows = (rows = []) => {
+  const normalized = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    const interviewer = String(row?.interviewer || "").trim();
+    const hasName = Boolean(interviewer);
+    const hasScore = !(row?.score === null || row?.score === undefined || row?.score === "");
+    if (!hasName && !hasScore) continue;
+    if (!hasName || !hasScore) {
+      return { ok: false, message: "请完整填写面试官与评分" };
+    }
+    const score = Number(row.score);
+    if (!Number.isInteger(score) || score < 0 || score > 100) {
+      return { ok: false, message: "评分需为 0-100 的整数" };
+    }
+    if (seen.has(interviewer)) {
+      return { ok: false, message: "面试官姓名不能重复" };
+    }
+    seen.add(interviewer);
+    normalized.push({ interviewer, score });
+  }
+  if (!normalized.length) {
+    return { ok: false, message: "请至少填写一位面试官评分" };
+  }
+  return { ok: true, rows: normalized };
+};
+
 export const useAdminInterviewActions = ({
   interviewScheduleForm,
   interviewResultForm,
@@ -46,6 +129,7 @@ export const useAdminInterviewActions = ({
       interview_round: autoRound,
       interview_at: toDateTimeLocal(item.interview_at),
       interviewer: item.interviewer || "",
+      interviewers: toScheduleInterviewerRows(item),
       interview_location: item.interview_location || "",
       note: item.note || "",
       send_sms: false,
@@ -70,6 +154,7 @@ export const useAdminInterviewActions = ({
       status: item.status || "",
       result: interviewMeta.result_next_round,
       score: item.score ?? null,
+      interviewer_scores: toResultScoreRows(item),
       result_note: item.result_note || "",
     });
     showInterviewResultForm.value = true;
@@ -101,9 +186,19 @@ export const useAdminInterviewActions = ({
     scheduleSaving.value = true;
     try {
       const shouldSendSms = Boolean(interviewScheduleForm.send_sms);
+      const hasStructuredInterviewerRows = Array.isArray(interviewScheduleForm.interviewers);
+      const interviewerNames = normalizeInterviewerNames(
+        hasStructuredInterviewerRows ? interviewScheduleForm.interviewers : []
+      );
+      const fallbackInterviewerNames = interviewerNames.length
+        ? interviewerNames
+        : hasStructuredInterviewerRows
+          ? []
+          : splitLegacyInterviewer(interviewScheduleForm.interviewer);
       const result = await interviewApi.scheduleCandidate(interviewScheduleForm.id, {
         interview_at: interviewScheduleForm.interview_at,
-        interviewer: interviewScheduleForm.interviewer,
+        interviewer: fallbackInterviewerNames.join("、"),
+        interviewers: fallbackInterviewerNames,
         interview_location: interviewScheduleForm.interview_location,
         note: interviewScheduleForm.note,
         send_sms: shouldSendSms,
@@ -161,22 +256,19 @@ export const useAdminInterviewActions = ({
   // 保存结果：支持进入下一轮/通过/淘汰，并按需刷新通过列表与人才库
   const saveInterviewResult = async () => {
     if (!interviewResultForm.id) return;
-    if (interviewResultForm.score !== null && interviewResultForm.score !== "") {
-      const score = Number(interviewResultForm.score);
-      if (!Number.isInteger(score) || score < 0 || score > 100) {
-        toastRef.value?.show("评分需为 0-100 的整数", "error");
-        return;
-      }
+    const scoreRowsResult = normalizeResultScoreRows(interviewResultForm.interviewer_scores);
+    if (!scoreRowsResult.ok) {
+      toastRef.value?.show(scoreRowsResult.message, "error");
+      return;
     }
+    const interviewerScores = scoreRowsResult.rows;
     resultSaving.value = true;
     try {
       const payload = {
         result: interviewResultForm.result,
         result_note: interviewResultForm.result_note,
-        score:
-          interviewResultForm.score === null || interviewResultForm.score === ""
-            ? null
-            : Number(interviewResultForm.score),
+        interviewer_scores: interviewerScores,
+        score: interviewerScores.length === 1 ? interviewerScores[0].score : null,
       };
       await interviewApi.saveResult(interviewResultForm.id, payload);
       const shouldRefreshPassed =

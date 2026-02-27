@@ -107,9 +107,9 @@
                 <td>{{ item.education_level || "-" }}</td>
                 <td>{{ item.interview_at ? `第${item.interview_round}轮` : "-" }}</td>
                 <td>{{ formatTime(item.interview_at) }}</td>
-                <td>{{ item.interviewer || "-" }}</td>
+                <td>{{ formatInterviewerCell(item) }}</td>
                 <td>{{ item.result || "-" }}</td>
-                <td>{{ item.score ?? "-" }}</td>
+                <td>{{ formatScoreCell(item) }}</td>
                 <td>{{ formatTime(item.created_at) }}</td>
                 <td>
                   <span :class="['chip', interviewStatusClass(item)]">
@@ -213,8 +213,32 @@
             />
           </div>
           <div class="form-group full-width">
-            <label>面试官</label>
-            <input v-model.trim="interviewScheduleForm.interviewer" />
+            <div class="interviewer-group-label">
+              <label>面试官</label>
+              <button type="button" class="btn btn-xs btn-default" @click="appendScheduleInterviewerRow">
+                新增面试官
+              </button>
+            </div>
+            <div class="interviewer-list">
+              <div
+                v-for="(name, index) in interviewScheduleForm.interviewers"
+                :key="`schedule-interviewer-${index}`"
+                class="interviewer-row"
+              >
+                <input
+                  v-model.trim="interviewScheduleForm.interviewers[index]"
+                  :placeholder="`面试官${index + 1}`"
+                />
+                <button
+                  type="button"
+                  class="btn btn-xs btn-danger"
+                  :disabled="interviewScheduleForm.interviewers.length <= 1"
+                  @click="removeScheduleInterviewerRow(index)"
+                >
+                  删除
+                </button>
+              </div>
+            </div>
           </div>
           <div class="form-group full-width">
             <label>面试地点 / 链接</label>
@@ -293,22 +317,51 @@
       </div>
       <div class="job-modal-body">
         <form class="form-compact" @submit.prevent="$emit('save-result')">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>面试结果</label>
-              <select v-model="interviewResultForm.result" required>
-                <option
-                  v-for="item in interviewResultOptions"
-                  :key="item.value"
-                  :value="item.value"
-                >
-                  {{ item.label }}
-                </option>
-              </select>
+          <div class="form-group">
+            <label>面试结果</label>
+            <select v-model="interviewResultForm.result" required>
+              <option
+                v-for="item in interviewResultOptions"
+                :key="item.value"
+                :value="item.value"
+              >
+                {{ item.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group full-width">
+            <div class="interviewer-group-label">
+              <label>面试官评分</label>
+              <button type="button" class="btn btn-xs btn-default" @click="appendResultScoreRow">
+                新增评分
+              </button>
             </div>
-            <div class="form-group">
-              <label>评分（0-100）</label>
-              <input v-model.number="interviewResultForm.score" type="number" min="0" max="100" placeholder="可选" />
+            <div class="interviewer-list">
+              <div
+                v-for="(row, index) in interviewResultForm.interviewer_scores"
+                :key="`result-score-${index}`"
+                class="interviewer-score-row"
+              >
+                <input
+                  v-model.trim="row.interviewer"
+                  placeholder="面试官姓名"
+                />
+                <input
+                  v-model.number="row.score"
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="评分"
+                />
+                <button
+                  type="button"
+                  class="btn btn-xs btn-danger"
+                  :disabled="interviewResultForm.interviewer_scores.length <= 1"
+                  @click="removeResultScoreRow(index)"
+                >
+                  删除
+                </button>
+              </div>
             </div>
           </div>
           <div class="form-group full-width">
@@ -474,6 +527,106 @@ const activeSmsCanRetry = computed(() =>
   activeSmsItem.value ? smsCanRetry(activeSmsItem.value) : false
 );
 
+const normalizeInterviewerNames = (values = []) => {
+  const normalized = [];
+  const seen = new Set();
+  (values || []).forEach((raw) => {
+    const name = String(raw || "").trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    normalized.push(name);
+  });
+  return normalized;
+};
+
+const splitInterviewerText = (text = "") => {
+  let raw = String(text || "").trim();
+  if (!raw) return [];
+  ["、", "，", ";", "；", "/", "|"].forEach((separator) => {
+    raw = raw.replaceAll(separator, ",");
+  });
+  return normalizeInterviewerNames(raw.split(","));
+};
+
+const normalizeInterviewerScoreRows = (rows = []) =>
+  (rows || [])
+    .map((row) => ({
+      interviewer: String(row?.interviewer || "").trim(),
+      score: row?.score,
+    }))
+    .filter(
+      (row) =>
+        row.interviewer &&
+        Number.isInteger(Number(row.score)) &&
+        Number(row.score) >= 0 &&
+        Number(row.score) <= 100
+    )
+    .map((row) => ({ interviewer: row.interviewer, score: Number(row.score) }));
+
+const formatInterviewerCell = (item) => {
+  const names = normalizeInterviewerNames(item?.interviewers || []);
+  if (names.length) return names.join("、");
+  const legacyNames = splitInterviewerText(item?.interviewer || "");
+  if (legacyNames.length) return legacyNames.join("、");
+  return "-";
+};
+
+const formatScoreCell = (item) => {
+  const rows = normalizeInterviewerScoreRows(item?.interviewer_scores || []);
+  if (rows.length) {
+    return rows.map((row) => `${row.interviewer}:${row.score}`).join(" / ");
+  }
+  return item?.score ?? "-";
+};
+
+const ensureScheduleInterviewerRows = () => {
+  if (!Array.isArray(props.interviewScheduleForm.interviewers)) {
+    props.interviewScheduleForm.interviewers = [""];
+    return;
+  }
+  if (!props.interviewScheduleForm.interviewers.length) {
+    props.interviewScheduleForm.interviewers.push("");
+  }
+};
+
+const appendScheduleInterviewerRow = () => {
+  ensureScheduleInterviewerRows();
+  props.interviewScheduleForm.interviewers.push("");
+};
+
+const removeScheduleInterviewerRow = (index) => {
+  ensureScheduleInterviewerRows();
+  if (props.interviewScheduleForm.interviewers.length <= 1) {
+    props.interviewScheduleForm.interviewers[0] = "";
+    return;
+  }
+  props.interviewScheduleForm.interviewers.splice(index, 1);
+};
+
+const ensureResultScoreRows = () => {
+  if (!Array.isArray(props.interviewResultForm.interviewer_scores)) {
+    props.interviewResultForm.interviewer_scores = [{ interviewer: "", score: null }];
+    return;
+  }
+  if (!props.interviewResultForm.interviewer_scores.length) {
+    props.interviewResultForm.interviewer_scores.push({ interviewer: "", score: null });
+  }
+};
+
+const appendResultScoreRow = () => {
+  ensureResultScoreRows();
+  props.interviewResultForm.interviewer_scores.push({ interviewer: "", score: null });
+};
+
+const removeResultScoreRow = (index) => {
+  ensureResultScoreRows();
+  if (props.interviewResultForm.interviewer_scores.length <= 1) {
+    props.interviewResultForm.interviewer_scores[0] = { interviewer: "", score: null };
+    return;
+  }
+  props.interviewResultForm.interviewer_scores.splice(index, 1);
+};
+
 const clearSmsPopoverCloseTimer = () => {
   if (smsPopoverCloseTimer) {
     clearTimeout(smsPopoverCloseTimer);
@@ -569,6 +722,8 @@ const formatDateOffset = (offsetDays = 0) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 const todayDate = formatDateOffset(0);
+ensureScheduleInterviewerRows();
+ensureResultScoreRows();
 
 onBeforeUnmount(() => {
   clearSmsPopoverCloseTimer();

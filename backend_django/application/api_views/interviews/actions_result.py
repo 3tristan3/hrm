@@ -17,6 +17,7 @@ class AdminInterviewCandidateResultView(_InterviewCandidateAdminQuerysetMixin, A
         data = serializer.validated_data
         result = data["result"]
         score = data.get("score", None)
+        interviewer_scores = data.get("interviewer_scores", None)
         result_note = data.get("result_note", "")
 
         try:
@@ -26,6 +27,7 @@ class AdminInterviewCandidateResultView(_InterviewCandidateAdminQuerysetMixin, A
                     candidate,
                     result=result,
                     score=score,
+                    interviewer_scores=interviewer_scores,
                     result_note=result_note,
                 )
         except InterviewFlowError as err:
@@ -47,6 +49,7 @@ class AdminInterviewCandidateResultView(_InterviewCandidateAdminQuerysetMixin, A
                 "round": candidate.interview_round,
                 "result": candidate.result,
                 "score": candidate.score,
+                "interviewer_scores": candidate.interviewer_scores,
             },
             application=application,
             interview_candidate=candidate,

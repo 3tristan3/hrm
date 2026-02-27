@@ -92,7 +92,7 @@ class InterviewMetaApiTests(APITestCase):
             reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id}),
             data={
                 "interview_at": interview_at.isoformat(),
-                "interviewer": "面试官A",
+                "interviewers": ["面试官A", "面试官B"],
                 "interview_location": "线上会议",
                 "send_sms": True,
             },
@@ -107,7 +107,51 @@ class InterviewMetaApiTests(APITestCase):
 
         updated = InterviewCandidate.objects.get(id=candidate.id)
         self.assertEqual(updated.status, InterviewCandidate.STATUS_SCHEDULED)
+        self.assertEqual(updated.interviewers, ["面试官A", "面试官B"])
+        self.assertEqual(updated.interviewer, "面试官A、面试官B")
         self.assertEqual(updated.sms_status, InterviewCandidate.SMS_STATUS_SUCCESS)
+
+    def test_save_result_supports_per_interviewer_scores(self):
+        candidate = self._create_candidate("结果候选人", "13800001121")
+        interview_at = timezone.now() + timedelta(hours=2)
+        schedule_url = reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id})
+        result_url = reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id})
+        schedule_resp = self.client.post(
+            schedule_url,
+            data={
+                "interview_at": interview_at.isoformat(),
+                "interviewers": ["面试官A", "面试官B"],
+                "interview_location": "总部A座301",
+            },
+            format="json",
+        )
+        self.assertEqual(schedule_resp.status_code, 200)
+
+        response = self.client.post(
+            result_url,
+            data={
+                "result": InterviewCandidate.RESULT_PASS,
+                "interviewer_scores": [
+                    {"interviewer": "面试官A", "score": 90},
+                    {"interviewer": "面试官B", "score": 80},
+                ],
+                "result_note": "综合通过",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("message"), "面试结果已保存")
+
+        updated = InterviewCandidate.objects.get(id=candidate.id)
+        self.assertEqual(updated.score, 85)
+        self.assertEqual(
+            updated.interviewer_scores,
+            [
+                {"interviewer": "面试官A", "score": 90},
+                {"interviewer": "面试官B", "score": 80},
+            ],
+        )
 
     @mock.patch("application.api_views.interviews.actions_sms.dispatch_interview_schedule_sms")
     def test_resend_sms_endpoint_records_failed_log_result(self, mocked_dispatch):

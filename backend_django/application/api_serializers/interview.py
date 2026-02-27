@@ -81,9 +81,11 @@ class InterviewCandidateListSerializer(serializers.ModelSerializer):
             "interview_round",
             "interview_at",
             "interviewer",
+            "interviewers",
             "interview_location",
             "result",
             "score",
+            "interviewer_scores",
             "result_note",
             "result_at",
             "note",
@@ -133,12 +135,15 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
     first_round_at = serializers.SerializerMethodField()
     first_round_score = serializers.SerializerMethodField()
     first_round_interviewer = serializers.SerializerMethodField()
+    first_round_interviewer_scores = serializers.SerializerMethodField()
     second_round_at = serializers.SerializerMethodField()
     second_round_score = serializers.SerializerMethodField()
     second_round_interviewer = serializers.SerializerMethodField()
+    second_round_interviewer_scores = serializers.SerializerMethodField()
     third_round_at = serializers.SerializerMethodField()
     third_round_score = serializers.SerializerMethodField()
     third_round_interviewer = serializers.SerializerMethodField()
+    third_round_interviewer_scores = serializers.SerializerMethodField()
 
     class Meta:
         model = InterviewCandidate
@@ -159,12 +164,15 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
             "first_round_at",
             "first_round_score",
             "first_round_interviewer",
+            "first_round_interviewer_scores",
             "second_round_at",
             "second_round_score",
             "second_round_interviewer",
+            "second_round_interviewer_scores",
             "third_round_at",
             "third_round_score",
             "third_round_interviewer",
+            "third_round_interviewer_scores",
         ]
 
     def _round_record_map(self, obj):
@@ -195,6 +203,12 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
         record = self._round_record(obj, round_no)
         return record.interviewer if record else ""
 
+    def _round_interviewer_scores(self, obj, round_no):
+        record = self._round_record(obj, round_no)
+        if not record:
+            return []
+        return record.interviewer_scores or []
+
     def get_first_round_at(self, obj):
         return self._round_interview_at(obj, 1)
 
@@ -203,6 +217,9 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
 
     def get_first_round_interviewer(self, obj):
         return self._round_interviewer(obj, 1)
+
+    def get_first_round_interviewer_scores(self, obj):
+        return self._round_interviewer_scores(obj, 1)
 
     def get_second_round_at(self, obj):
         return self._round_interview_at(obj, 2)
@@ -213,6 +230,9 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
     def get_second_round_interviewer(self, obj):
         return self._round_interviewer(obj, 2)
 
+    def get_second_round_interviewer_scores(self, obj):
+        return self._round_interviewer_scores(obj, 2)
+
     def get_third_round_at(self, obj):
         return self._round_interview_at(obj, 3)
 
@@ -222,11 +242,19 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
     def get_third_round_interviewer(self, obj):
         return self._round_interviewer(obj, 3)
 
+    def get_third_round_interviewer_scores(self, obj):
+        return self._round_interviewer_scores(obj, 3)
+
 class InterviewCandidateScheduleSerializer(serializers.Serializer):
     """安排/改期面试入参。"""
 
     interview_at = serializers.DateTimeField(input_formats=["%Y-%m-%dT%H:%M", "iso-8601"])
     interviewer = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    interviewers = serializers.ListField(
+        child=serializers.CharField(max_length=100),
+        required=False,
+        allow_empty=True,
+    )
     interview_location = serializers.CharField(max_length=200, required=False, allow_blank=True)
     note = serializers.CharField(required=False, allow_blank=True)
     send_sms = serializers.BooleanField(required=False, default=False)
@@ -235,6 +263,33 @@ class InterviewCandidateScheduleSerializer(serializers.Serializer):
         if value < timezone.now():
             raise serializers.ValidationError("面试时间不能早于当前时间")
         return value
+
+    def validate_interviewers(self, value):
+        names = []
+        seen = set()
+        for raw in value or []:
+            name = str(raw or "").strip()
+            if not name:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        if len(names) > 10:
+            raise serializers.ValidationError("单场面试最多填写 10 位面试官")
+        return names
+
+    def validate(self, attrs):
+        interviewers = attrs.get("interviewers", None)
+        interviewer = str(attrs.get("interviewer", "") or "").strip()
+        if not interviewers and interviewer:
+            raw = interviewer
+            for separator in ("、", "，", ";", "；", "/", "|"):
+                raw = raw.replace(separator, ",")
+            attrs["interviewers"] = self.validate_interviewers(raw.split(","))
+        if interviewers and not interviewer:
+            attrs["interviewer"] = "、".join(interviewers)
+        return attrs
 
 class InterviewCandidateCancelScheduleSerializer(serializers.Serializer):
     """取消安排入参。"""
@@ -246,7 +301,36 @@ class InterviewCandidateResultSerializer(serializers.Serializer):
 
     result = serializers.ChoiceField(choices=InterviewCandidate.RESULT_CHOICES)
     score = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
+    interviewer_scores = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        allow_empty=True,
+    )
     result_note = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_interviewer_scores(self, value):
+        rows = []
+        seen = set()
+        for item in value or []:
+            if not isinstance(item, dict):
+                raise serializers.ValidationError("面试官评分项格式不正确")
+            interviewer = str(item.get("interviewer") or "").strip()
+            score = item.get("score", None)
+            if not interviewer:
+                raise serializers.ValidationError("面试官姓名不能为空")
+            if interviewer in seen:
+                raise serializers.ValidationError("面试官姓名不能重复")
+            try:
+                score_value = int(score)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError("面试官评分必须是 0-100 的整数")
+            if score_value < 0 or score_value > 100:
+                raise serializers.ValidationError("面试官评分必须是 0-100 的整数")
+            seen.add(interviewer)
+            rows.append({"interviewer": interviewer, "score": score_value})
+        if len(rows) > 10:
+            raise serializers.ValidationError("单场面试最多记录 10 位面试官评分")
+        return rows
 
 
 class InterviewCandidateResendSmsSerializer(serializers.Serializer):

@@ -79,6 +79,7 @@ export function createAdminAppState() {
     interview_round: 1,
     interview_at: "",
     interviewer: "",
+    interviewers: [""],
     interview_location: "",
     note: "",
     send_sms: false,
@@ -90,6 +91,7 @@ export function createAdminAppState() {
     status: "",
     result: defaultInterviewMeta.result_next_round,
     score: null,
+    interviewer_scores: [{ interviewer: "", score: null }],
     result_note: "",
   });
 

@@ -145,6 +145,31 @@
   min-width: 272px;
   white-space: nowrap;
 }
+.interviewer-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.interviewer-group-label label {
+  margin: 0;
+}
+.interviewer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.interviewer-row,
+.interviewer-score-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.interviewer-score-row {
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+}
 .interview-table .action-cell {
   flex-wrap: nowrap;
   justify-content: center;

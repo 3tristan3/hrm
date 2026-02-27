@@ -70,6 +70,7 @@ export function createAdminResetHelpers({
       interview_round: 1,
       interview_at: "",
       interviewer: "",
+      interviewers: [""],
       interview_location: "",
       note: "",
       send_sms: false,
@@ -84,6 +85,7 @@ export function createAdminResetHelpers({
       status: "",
       result: interviewMeta.result_next_round,
       score: null,
+      interviewer_scores: [{ interviewer: "", score: null }],
       result_note: "",
     });
   }
