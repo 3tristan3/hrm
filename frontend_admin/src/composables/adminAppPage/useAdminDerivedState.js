@@ -7,6 +7,7 @@ import {
   buildOperationModuleOptions,
 } from "../../constants/operationLog";
 import { defaultInterviewMeta } from "../../utils/interviewMeta";
+import { resolveOfferStatus } from "../../utils/offerStatusTransition";
 
 export const useAdminDerivedState = ({
   tabs,
@@ -240,6 +241,10 @@ export const useAdminDerivedState = ({
       allLabel: "全部状态",
       pendingLabel: "待确认入职",
       confirmedLabel: "已确认入职",
+      statusLabelMap: {
+        offer_rejected: "拒绝offer",
+      },
+      resolveStatus: (item) => resolveOfferStatus(item),
     });
 
   const { jobCategories: passedJobCategories, filteredItems: filteredPassedCandidates } =

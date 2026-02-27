@@ -19,6 +19,11 @@ const isDirectTalentReject = (item, interviewMeta = {}) => {
 };
 
 export const getInterviewStatusClass = (item, interviewMeta = {}) => {
+  if (item?.offer_status === "offer_rejected") return "chip-reject";
+  if (item?.offer_status === "confirmed_hire") return "chip-hired";
+  if (item?.offer_status === "pending_hire" && item?.result === interviewMeta.result_pass) {
+    return "chip-pass";
+  }
   if (item?.is_hired) return "chip-hired";
   if (item?.status === interviewMeta.status_scheduled) return "chip-scheduled";
   if (item?.result === interviewMeta.result_next_round || item?.result === interviewMeta.result_pass) {
@@ -36,6 +41,11 @@ export const getInterviewStatusText = (item, interviewMeta = {}) => {
   const resultReject = interviewMeta.result_reject || "淘汰";
   const roundLabel = roundFaceLabel(item);
 
+  if (item?.offer_status === "offer_rejected") return "拒绝offer";
+  if (item?.offer_status === "confirmed_hire") return "确认入职";
+  if (item?.offer_status === "pending_hire" && item?.result === interviewMeta.result_pass) {
+    return "待确认入职";
+  }
   if (item?.is_hired) return "确认入职";
   if (item?.status === interviewMeta.status_scheduled) return `已安排${roundLabel}`;
   if (item?.result === interviewMeta.result_pending) return `${roundLabel}${resultPending}`;

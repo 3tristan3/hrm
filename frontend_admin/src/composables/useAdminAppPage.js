@@ -183,11 +183,11 @@ export const useAdminAppPage = () => {
   };
 
   const {
-    isApplicationSelected, getApplicationGroupIds, isApplicationGroupFullySelected, toggleApplicationGroupSelection, toggleApplicationSelection, addSelectedToInterviewPool, addSelectedToTalentPool, addSelectedTalentToInterviewPool, refreshInterviewCandidates, changeInterviewPage, changePassedPage, changeTalentPage, changeInterviewPageSize, changePassedPageSize, changeTalentPageSize, changeOperationLogPage, changeOperationLogPageSize, refreshPassedCandidates, confirmSelectedPassedHires, refreshTalentPoolCandidates,
+    isApplicationSelected, getApplicationGroupIds, isApplicationGroupFullySelected, toggleApplicationGroupSelection, toggleApplicationSelection, addSelectedToInterviewPool, addSelectedToTalentPool, addSelectedTalentToInterviewPool, refreshInterviewCandidates, changeInterviewPage, changePassedPage, changeTalentPage, changeInterviewPageSize, changePassedPageSize, changeTalentPageSize, changeOperationLogPage, changeOperationLogPageSize, refreshPassedCandidates, confirmSelectedPassedHires, changePassedCandidateStatus, refreshTalentPoolCandidates,
     searchOperationLogs, refreshOperationLogs, refreshInterviewModules, batchRemoveInterviewCandidates, removeInterviewCandidate,
   } = useAdminApplicationActions({
     selectedApplicationIds, selectedInterviewIds, selectedPassedIds, selectedTalentIds, activeTab, dataLoaded, interviewPagination, passedPagination, talentPagination, operationLogPagination, operationLogPageCursorMap, runWithConfirm, interviewApi, loadApplications, loadInterviewCandidates, loadPassedCandidates, loadTalentPoolCandidates, loadOperationLogs, resetInterviewFilters, resetPassedFilters,
-    resetTalentFilters, resetOperationLogPageState, notifySuccess,
+    resetTalentFilters, resetOperationLogPageState, notifySuccess, notifyError,
   });
 
   const {
@@ -273,7 +273,7 @@ export const useAdminAppPage = () => {
     addSelectedToInterviewPool, addSelectedToTalentPool, addSelectedTalentToInterviewPool, refreshInterviewCandidates,
     changeInterviewPage, changePassedPage, changeTalentPage, changeInterviewPageSize,
     changePassedPageSize, changeTalentPageSize, changeOperationLogPage, changeOperationLogPageSize,
-    refreshPassedCandidates, confirmSelectedPassedHires, refreshTalentPoolCandidates, searchOperationLogs,
+    refreshPassedCandidates, confirmSelectedPassedHires, changePassedCandidateStatus, refreshTalentPoolCandidates, searchOperationLogs,
     refreshOperationLogs, refreshInterviewModules, batchRemoveInterviewCandidates, removeInterviewCandidate,
     openApplicationFromInterview, openApplicationFromOutcome, openApplication, closeApplication,
     attachmentCardMeta, applicationAttachments, keyAttachmentCards, otherAttachmentFiles,

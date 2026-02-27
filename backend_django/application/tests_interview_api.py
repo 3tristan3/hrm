@@ -706,6 +706,7 @@ class InterviewMetaApiTests(APITestCase):
         candidate.refresh_from_db()
         self.assertTrue(candidate.is_hired)
         self.assertIsNotNone(candidate.hired_at)
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_CONFIRMED)
 
         actions = list(
             OperationLog.objects.filter(
@@ -715,7 +716,7 @@ class InterviewMetaApiTests(APITestCase):
         self.assertIn("CONFIRM_HIRE", actions)
         self.assertIn("BATCH_CONFIRM_HIRE", actions)
 
-    def test_batch_confirm_hire_is_idempotent(self):
+    def test_batch_confirm_hire_rejects_already_confirmed_candidates(self):
         candidate = self._create_candidate(
             "已确认候选人",
             "13800001113",
@@ -723,6 +724,7 @@ class InterviewMetaApiTests(APITestCase):
             result=InterviewCandidate.RESULT_PASS,
             is_hired=True,
             hired_at=timezone.now(),
+            offer_status=InterviewCandidate.OFFER_STATUS_CONFIRMED,
         )
         before_hired_at = candidate.hired_at
 
@@ -731,13 +733,136 @@ class InterviewMetaApiTests(APITestCase):
             data={"interview_candidate_ids": [candidate.id]},
             format="json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         payload = response.json()
-        self.assertEqual(payload.get("confirmed"), 0)
-        self.assertEqual(payload.get("already_confirmed"), 1)
+        self.assertIn("仅支持对“待确认入职”状态候选人执行确认入职", payload.get("error", ""))
+        self.assertIn("details", payload)
+        self.assertIn("interview_candidate_ids", payload["details"])
 
         candidate.refresh_from_db()
         self.assertEqual(candidate.hired_at, before_hired_at)
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_CONFIRMED)
+
+    def test_update_passed_candidate_offer_status_to_rejected(self):
+        candidate = self._create_candidate(
+            "拒绝Offer候选人",
+            "13800001117",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_PASS,
+            is_hired=False,
+            hired_at=None,
+            offer_status=InterviewCandidate.OFFER_STATUS_PENDING,
+        )
+
+        response = self.client.post(
+            reverse("admin-passed-candidate-offer-status", kwargs={"pk": candidate.id}),
+            data={"offer_status": InterviewCandidate.OFFER_STATUS_REJECTED},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("message"), "状态已更新")
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_REJECTED)
+        self.assertFalse(candidate.is_hired)
+        self.assertIsNone(candidate.hired_at)
+
+    def test_update_passed_candidate_offer_status_rejects_confirmed_candidate(self):
+        candidate = self._create_candidate(
+            "终态候选人",
+            "13800001171",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_PASS,
+            is_hired=True,
+            hired_at=timezone.now(),
+            offer_status=InterviewCandidate.OFFER_STATUS_CONFIRMED,
+        )
+
+        response = self.client.post(
+            reverse("admin-passed-candidate-offer-status", kwargs={"pk": candidate.id}),
+            data={"offer_status": InterviewCandidate.OFFER_STATUS_REJECTED},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn("已确认入职为最终状态，不可修改", payload.get("error", ""))
+        self.assertIn("details", payload)
+        self.assertIn("offer_status", payload["details"])
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_CONFIRMED)
+        self.assertTrue(candidate.is_hired)
+        self.assertIsNotNone(candidate.hired_at)
+
+    def test_update_passed_candidate_offer_status_can_revert_to_pending(self):
+        candidate = self._create_candidate(
+            "可回退候选人",
+            "13800001170",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_PASS,
+            is_hired=False,
+            hired_at=None,
+            offer_status=InterviewCandidate.OFFER_STATUS_REJECTED,
+        )
+
+        response = self.client.post(
+            reverse("admin-passed-candidate-offer-status", kwargs={"pk": candidate.id}),
+            data={"offer_status": InterviewCandidate.OFFER_STATUS_PENDING},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("message"), "状态已更新")
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_PENDING)
+        self.assertFalse(candidate.is_hired)
+        self.assertIsNone(candidate.hired_at)
+
+    def test_batch_confirm_hire_rejects_offer_rejected_candidates(self):
+        candidate = self._create_candidate(
+            "已拒绝候选人",
+            "13800001172",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_PASS,
+            is_hired=False,
+            hired_at=None,
+            offer_status=InterviewCandidate.OFFER_STATUS_REJECTED,
+        )
+
+        response = self.client.post(
+            reverse("admin-passed-candidates-batch-confirm-hire"),
+            data={"interview_candidate_ids": [candidate.id]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn("仅支持对“待确认入职”状态候选人执行确认入职", payload.get("error", ""))
+        self.assertIn("details", payload)
+        self.assertIn("interview_candidate_ids", payload["details"])
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_REJECTED)
+        self.assertFalse(candidate.is_hired)
+        self.assertIsNone(candidate.hired_at)
+
+    def test_update_passed_candidate_offer_status_respects_region_scope(self):
+        other_region = Region.objects.create(name="外区Offer", code="other-offer-region")
+        candidate = self._create_candidate(
+            "跨区Offer候选人",
+            "13800001118",
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_PASS,
+            region=other_region,
+        )
+
+        response = self.client.post(
+            reverse("admin-passed-candidate-offer-status", kwargs={"pk": candidate.id}),
+            data={"offer_status": InterviewCandidate.OFFER_STATUS_REJECTED},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_batch_confirm_hire_rejects_non_passed_candidates(self):
         passed_candidate = self._create_candidate(

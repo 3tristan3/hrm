@@ -79,6 +79,12 @@ export const createInterviewApi = ({ adminBase, request }) => ({
       }),
     });
   },
+  async updatePassedCandidateOfferStatus(id, payload) {
+    return request(`${adminBase}/passed-candidates/${id}/offer-status/`, {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  },
   async removeCandidate(id) {
     return request(`${adminBase}/interview-candidates/${id}/`, {
       method: "DELETE",

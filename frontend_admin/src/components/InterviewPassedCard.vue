@@ -84,7 +84,12 @@
             <tbody>
               <tr v-for="item in filteredItems" :key="item.id">
                 <td>
-                  <input type="checkbox" :value="item.id" v-model="localSelectedIds" />
+                  <input
+                    type="checkbox"
+                    :value="item.id"
+                    v-model="localSelectedIds"
+                    :disabled="!canSelectItem(item)"
+                  />
                 </td>
                 <td class="font-medium">
                   <DetailNameButton :label="item.name || ''" @open="$emit('open-detail', item)" />
@@ -95,7 +100,25 @@
                 <td>{{ item.recruit_type || "-" }}</td>
                 <td>{{ item.education_level || "-" }}</td>
                 <td>
-                  <span :class="['chip', interviewStatusClass(item)]">{{ interviewStatusText(item) }}</span>
+                  <div class="status-cell">
+                    <span :class="['chip', interviewStatusClass(item)]">{{ interviewStatusText(item) }}</span>
+                    <button
+                      v-if="availableStatusActions(item).length"
+                      type="button"
+                      class="status-action-icon"
+                      title="修改状态"
+                      @click.stop="toggleStatusMenu(item, $event)"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none">
+                        <path d="M6 9l6 6 6-6"></path>
+                      </svg>
+                    </button>
+                    <span
+                      v-else
+                      class="status-action-placeholder"
+                      aria-hidden="true"
+                    ></span>
+                  </div>
                 </td>
                 <td>{{ formatTime(item.first_round_at) }}</td>
                 <td>{{ formatRoundScore(item.first_round_interviewer_scores, item.first_round_score) }}</td>
@@ -121,12 +144,35 @@
       />
     </div>
   </div>
+  <teleport to="body">
+    <div
+      v-if="activeStatusMenuItem"
+      ref="statusMenuRef"
+      class="status-action-menu status-action-menu-floating"
+      :style="statusMenuStyle"
+      @click.stop
+    >
+      <button
+        v-for="option in availableStatusActions(activeStatusMenuItem)"
+        :key="`${activeStatusMenuItem.id}-${option.value}`"
+        type="button"
+        class="status-action-menu-item"
+        @click.stop="onChangeStatus(activeStatusMenuItem, option.value)"
+      >
+        {{ option.label }}
+      </button>
+    </div>
+  </teleport>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted } from "vue";
 import DetailNameButton from "./DetailNameButton.vue";
 import ListPaginationBar from "./ListPaginationBar.vue";
+import { useFloatingActionMenu } from "../composables/useFloatingActionMenu";
+import {
+  getAvailableOfferStatusActions,
+} from "../utils/offerStatusTransition";
 
 const emit = defineEmits([
   "refresh",
@@ -135,6 +181,7 @@ const emit = defineEmits([
   "open-detail",
   "reset-filters",
   "primary-action",
+  "change-status",
   "update:selected-ids",
   "update:is-all-visible-selected",
 ]);
@@ -220,20 +267,113 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  statusActionOptions: {
+    type: Array,
+    default: () => [],
+  },
+  isItemSelectable: {
+    type: Function,
+    default: null,
+  },
 });
 
 const totalCount = computed(() => Math.max(Number(props.pagination?.count || props.items.length), props.items.length));
 const selectedCount = computed(() => props.selectedIds.length);
 
+const canSelectItem = (item) => {
+  if (typeof props.isItemSelectable !== "function") return true;
+  return Boolean(props.isItemSelectable(item));
+};
+
+const visibleIds = computed(() =>
+  (Array.isArray(props.filteredItems) ? props.filteredItems : [])
+    .map((item) => item?.id)
+    .filter((id) => Number.isFinite(Number(id)))
+);
+
+const selectableVisibleIds = computed(() =>
+  (Array.isArray(props.filteredItems) ? props.filteredItems : [])
+    .filter((item) => canSelectItem(item))
+    .map((item) => item?.id)
+    .filter((id) => Number.isFinite(Number(id)))
+);
+
 const localSelectedIds = computed({
-  get: () => props.selectedIds,
-  set: (value) => emit("update:selected-ids", value),
+  get: () => {
+    const blockedVisibleSet = new Set(
+      (Array.isArray(props.filteredItems) ? props.filteredItems : [])
+        .filter((item) => !canSelectItem(item))
+        .map((item) => item?.id)
+    );
+    return (Array.isArray(props.selectedIds) ? props.selectedIds : []).filter(
+      (id) => !blockedVisibleSet.has(id)
+    );
+  },
+  set: (value) => {
+    const nextValue = Array.isArray(value) ? value : [];
+    const visibleSet = new Set(visibleIds.value);
+    const selectableSet = new Set(selectableVisibleIds.value);
+    const preservedNonVisible = (Array.isArray(props.selectedIds) ? props.selectedIds : []).filter(
+      (id) => !visibleSet.has(id)
+    );
+    const normalizedVisible = nextValue.filter((id) => selectableSet.has(id));
+    emit("update:selected-ids", Array.from(new Set([...preservedNonVisible, ...normalizedVisible])));
+  },
 });
 
 const localIsAllVisibleSelected = computed({
-  get: () => props.isAllVisibleSelected,
-  set: (value) => emit("update:is-all-visible-selected", value),
+  get: () => {
+    const selectableIds = selectableVisibleIds.value;
+    if (!selectableIds.length) return false;
+    const selectedSet = new Set(localSelectedIds.value);
+    return selectableIds.every((id) => selectedSet.has(id));
+  },
+  set: (value) => {
+    const visibleSet = new Set(visibleIds.value);
+    const preservedNonVisible = (Array.isArray(props.selectedIds) ? props.selectedIds : []).filter(
+      (id) => !visibleSet.has(id)
+    );
+    if (!value) {
+      emit("update:selected-ids", preservedNonVisible);
+      return;
+    }
+    emit(
+      "update:selected-ids",
+      Array.from(new Set([...preservedNonVisible, ...selectableVisibleIds.value]))
+    );
+  },
 });
+
+const findItemById = (candidateId) =>
+  props.filteredItems.find((item) => item?.id === candidateId) ||
+  props.items.find((item) => item?.id === candidateId) ||
+  null;
+
+const {
+  activeMenuItem: activeStatusMenuItem,
+  menuRef: statusMenuRef,
+  menuStyle: statusMenuStyle,
+  closeMenu: closeStatusMenu,
+  toggleMenuById,
+  bindGlobalClickClose,
+  unbindGlobalClickClose,
+} = useFloatingActionMenu({
+  findItemById,
+  estimatedWidth: 132,
+  offsetY: 6,
+});
+
+const availableStatusActions = (item) =>
+  getAvailableOfferStatusActions(item, props.statusActionOptions);
+
+const toggleStatusMenu = (item, event) => {
+  toggleMenuById(item?.id, event);
+};
+
+const onChangeStatus = (item, nextStatus) => {
+  closeStatusMenu();
+  emit("change-status", { item, nextStatus });
+};
 
 // 列表内统一时间展示
 const formatTime = (value) => (value ? new Date(value).toLocaleString() : "-");
@@ -268,4 +408,12 @@ const formatRoundInterviewer = (rows, fallbackInterviewer) => {
   }
   return fallbackInterviewer || "-";
 };
+
+onMounted(() => {
+  bindGlobalClickClose();
+});
+
+onBeforeUnmount(() => {
+  unbindGlobalClickClose();
+});
 </script>

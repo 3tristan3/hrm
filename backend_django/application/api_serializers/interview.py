@@ -88,6 +88,7 @@ class InterviewCandidateListSerializer(serializers.ModelSerializer):
             "interviewer_scores",
             "result_note",
             "result_at",
+            "offer_status",
             "note",
             "sms_status",
             "sms_retry_count",
@@ -161,6 +162,7 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
             "education_level",
             "is_hired",
             "hired_at",
+            "offer_status",
             "first_round_at",
             "first_round_score",
             "first_round_interviewer",
@@ -331,6 +333,17 @@ class InterviewCandidateResultSerializer(serializers.Serializer):
         if len(rows) > 10:
             raise serializers.ValidationError("单场面试最多记录 10 位面试官评分")
         return rows
+
+
+class PassedCandidateOfferStatusSerializer(serializers.Serializer):
+    """通过人员状态更新入参。"""
+
+    offer_status = serializers.ChoiceField(
+        choices=[
+            InterviewCandidate.OFFER_STATUS_PENDING,
+            InterviewCandidate.OFFER_STATUS_REJECTED,
+        ]
+    )
 
 
 class InterviewCandidateResendSmsSerializer(serializers.Serializer):

@@ -1,4 +1,5 @@
 import { cursorFromLink } from "../../api/client";
+import { OFFER_STATUS_LABELS } from "../../utils/offerStatusTransition";
 
 export const useAdminApplicationActions = ({
   selectedApplicationIds,
@@ -24,6 +25,7 @@ export const useAdminApplicationActions = ({
   resetTalentFilters,
   resetOperationLogPageState,
   notifySuccess,
+  notifyError,
 }) => {
   const refreshInterviewModules = async ({ forcePassed = false, forceTalent = false } = {}) => {
     await loadInterviewCandidates(true, interviewPagination.page || 1);
@@ -265,6 +267,30 @@ export const useAdminApplicationActions = ({
     });
   };
 
+  const changePassedCandidateStatus = async ({ item, nextStatus }) => {
+    const candidateId = Number(item?.id || 0);
+    const statusValue = String(nextStatus || "").trim();
+    if (!Number.isFinite(candidateId) || candidateId <= 0 || !statusValue) return;
+    const statusLabel = OFFER_STATUS_LABELS[statusValue] || statusValue;
+    await runWithConfirm({
+      confirm: {
+        title: "修改状态",
+        content: `确认将「${item?.name || "该候选人"}」状态改为“${statusLabel}”吗？`,
+        confirmText: "确认修改",
+        type: "danger",
+      },
+      action: async () => {
+        const result = await interviewApi.updatePassedCandidateOfferStatus(candidateId, {
+          offer_status: statusValue,
+        });
+        notifySuccess(result?.message || `状态已更新为${statusLabel}`);
+        selectedPassedIds.value = selectedPassedIds.value.filter((id) => id !== candidateId);
+        await loadPassedCandidates(true, passedPagination.page || 1);
+      },
+      onActionError: notifyError,
+    });
+  };
+
   const refreshTalentPoolCandidates = async () => {
     await loadTalentPoolCandidates(true, 1);
     selectedTalentIds.value = [];
@@ -338,6 +364,7 @@ export const useAdminApplicationActions = ({
     changeOperationLogPageSize,
     refreshPassedCandidates,
     confirmSelectedPassedHires,
+    changePassedCandidateStatus,
     refreshTalentPoolCandidates,
     searchOperationLogs,
     refreshOperationLogs,

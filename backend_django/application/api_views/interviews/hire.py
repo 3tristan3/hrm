@@ -1,6 +1,10 @@
 """面试确认入职视图子模块。"""
 from .shared import *
 from ...hire_integration import dispatch_hire_confirmation
+from ...offer_status_transition import (
+    OfferStatusTransitionError,
+    OfferStatusTransitionService,
+)
 
 
 class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
@@ -38,18 +42,30 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                 )
 
             invalid_state_ids = []
+            invalid_offer_status_ids = []
+
             for candidate_id in interview_candidate_ids:
                 candidate = candidate_map[candidate_id]
-                if (
-                    candidate.status != InterviewCandidate.STATUS_COMPLETED
-                    or candidate.result != InterviewCandidate.RESULT_PASS
-                ):
-                    invalid_state_ids.append(candidate_id)
+                try:
+                    OfferStatusTransitionService.ensure_confirm_hire_eligible(candidate)
+                except OfferStatusTransitionError as exc:
+                    if exc.code == "invalid_candidate_state":
+                        invalid_state_ids.append(candidate_id)
+                    elif exc.code == "invalid_offer_status_for_confirm":
+                        invalid_offer_status_ids.append(candidate_id)
             if invalid_state_ids:
                 return Response(
                     {
                         "error": "仅支持对“已完成且通过”的候选人确认入职",
                         "details": {"interview_candidate_ids": invalid_state_ids},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if invalid_offer_status_ids:
+                return Response(
+                    {
+                        "error": "仅支持对“待确认入职”状态候选人执行确认入职",
+                        "details": {"interview_candidate_ids": invalid_offer_status_ids},
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
@@ -61,21 +77,15 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
 
             for candidate_id in interview_candidate_ids:
                 candidate = candidate_map[candidate_id]
-                is_already_confirmed = bool(candidate.is_hired)
-                push_result = None
-                if is_already_confirmed:
-                    already_confirmed += 1
-                else:
-                    candidate.is_hired = True
-                    candidate.hired_at = now
-                    candidate.save(update_fields=["is_hired", "hired_at", "updated_at"])
-                    push_result = dispatch_hire_confirmation(candidate, push_targets=push_targets)
-                    confirmed += 1
+                OfferStatusTransitionService.apply_confirm_hire(candidate, confirmed_at=now)
+                candidate.save(update_fields=["is_hired", "hired_at", "offer_status", "updated_at"])
+                push_result = dispatch_hire_confirmation(candidate, push_targets=push_targets)
+                confirmed += 1
 
                 candidate_audit_rows.append(
                     {
                         "candidate": candidate,
-                        "already_confirmed": is_already_confirmed,
+                        "already_confirmed": False,
                         "push_result": push_result,
                     }
                 )
@@ -104,6 +114,7 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                     "already_confirmed": is_existing,
                     "is_hired": candidate.is_hired,
                     "hired_at": candidate.hired_at.isoformat() if candidate.hired_at else "",
+                    "offer_status": candidate.offer_status,
                     "push_targets": push_targets,
                     "push_result": row["push_result"] or {},
                 },
@@ -136,3 +147,71 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
                 "total": len(interview_candidate_ids),
             }
         )
+
+
+class AdminPassedCandidateOfferStatusView(AdminScopedMixin, APIView):
+    """更新面试通过人员的 Offer 状态。"""
+
+    def post(self, request: Request, pk: int):
+        serializer = PassedCandidateOfferStatusSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        next_status = serializer.validated_data["offer_status"]
+        region_id = self._user_region_scope()
+
+        with transaction.atomic():
+            queryset = InterviewCandidate.objects.select_for_update().select_related(
+                "application",
+                "application__region",
+            ).filter(
+                id=pk,
+                status=InterviewCandidate.STATUS_COMPLETED,
+                result=InterviewCandidate.RESULT_PASS,
+            )
+            if region_id:
+                queryset = queryset.filter(application__region_id=region_id)
+            candidate = get_object_or_404(queryset)
+
+            try:
+                before_status, changed = OfferStatusTransitionService.apply_offer_status_change(
+                    candidate,
+                    next_status,
+                )
+            except OfferStatusTransitionError as exc:
+                return Response(
+                    {
+                        "error": exc.error,
+                        "details": exc.details or {},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if changed:
+                candidate.save(update_fields=["offer_status", "is_hired", "hired_at", "updated_at"])
+
+        application = candidate.application
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="UPDATE_OFFER_STATUS",
+            target_type="interview_candidate",
+            target_id=candidate.id,
+            target_label=application.name,
+            summary=f"更新Offer状态：{application.name}",
+            details={
+                "interview_candidate_id": candidate.id,
+                "application_id": application.id,
+                "before_offer_status": before_status,
+                "after_offer_status": candidate.offer_status,
+                "is_hired": candidate.is_hired,
+            },
+            application=application,
+            interview_candidate=candidate,
+            region=application.region,
+        )
+        output = InterviewPassedCandidateListSerializer(candidate, context={"request": request})
+        return Response({"message": "状态已更新", "candidate": output.data})

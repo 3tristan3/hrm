@@ -10,35 +10,83 @@ export const useHireStatusFilter = (itemsRef, filtersRef, options = {}) => {
   const allLabel = options.allLabel || "全部状态";
   const pendingLabel = options.pendingLabel || "待确认入职";
   const confirmedLabel = options.confirmedLabel || "已确认入职";
+  const statusLabelMap = {
+    [pendingValue]: pendingLabel,
+    [confirmedValue]: confirmedLabel,
+    ...(options.statusLabelMap || {}),
+  };
+  const resolveStatus =
+    typeof options.resolveStatus === "function"
+      ? options.resolveStatus
+      : (item) => (item?.is_hired ? confirmedValue : pendingValue);
 
-  const filteredItems = computed(() => {
-    const list = toArray(itemsRef);
-    const filters = unref(filtersRef) || {};
-    const selectedStatus = String(filters[filterKey] || allValue);
+  const normalizeStatus = (item) => String(resolveStatus(item) || "").trim();
 
-    if (selectedStatus === pendingValue) {
-      return list.filter((item) => !item?.is_hired);
-    }
-    if (selectedStatus === confirmedValue) {
-      return list.filter((item) => Boolean(item?.is_hired));
-    }
-    return list;
+  const statusCounts = computed(() => {
+    const counter = new Map();
+    toArray(itemsRef).forEach((item) => {
+      const status = normalizeStatus(item);
+      if (!status) return;
+      counter.set(status, (counter.get(status) || 0) + 1);
+    });
+    return counter;
   });
 
-  const statusOptions = computed(() => {
-    const list = toArray(itemsRef);
-    const confirmed = list.filter((item) => Boolean(item?.is_hired)).length;
-    const pending = Math.max(list.length - confirmed, 0);
+  const sortByLabels = options.sortByLabels !== false;
+  const statusSortLocale = options.statusSortLocale || "zh-Hans-CN";
 
+  const sortOptions = (items) => {
+    if (!sortByLabels) return items;
+    return items.sort((a, b) =>
+      String(a.label || a.value).localeCompare(
+        String(b.label || b.value),
+        statusSortLocale
+      )
+    );
+  };
+
+  const resolveStatusLabel = (value) => {
+    if (statusLabelMap[value]) return statusLabelMap[value];
+    return value;
+  };
+
+  const resolveStatusOptions = () => {
+    const dynamic = [];
+    statusCounts.value.forEach((count, value) => {
+      if (count <= 0) return;
+      dynamic.push({
+        value,
+        label: resolveStatusLabel(value),
+        count,
+      });
+    });
+    return sortOptions(dynamic);
+  };
+
+  const totalCount = computed(() =>
+    Array.from(statusCounts.value.values()).reduce((sum, value) => sum + Number(value || 0), 0)
+  );
+
+  const statusOptions = computed(() => {
+    const dynamicOptions = resolveStatusOptions();
     return [
-      { value: allValue, label: allLabel, count: list.length },
-      { value: pendingValue, label: pendingLabel, count: pending },
-      { value: confirmedValue, label: confirmedLabel, count: confirmed },
+      { value: allValue, label: allLabel, count: totalCount.value },
+      ...dynamicOptions,
     ];
   });
 
+  const guardedFilteredItems = computed(() => {
+    const list = toArray(itemsRef);
+    const filters = unref(filtersRef) || {};
+    const selectedStatus = String(filters[filterKey] || allValue);
+    if (selectedStatus === allValue) return list;
+    const existsInList = list.some((item) => normalizeStatus(item) === selectedStatus);
+    if (!existsInList) return list;
+    return list.filter((item) => normalizeStatus(item) === selectedStatus);
+  });
+
   return {
-    filteredItems,
+    filteredItems: guardedFilteredItems,
     statusOptions,
   };
 };

@@ -25,6 +25,7 @@ OPERATION_ACTION_LABELS = {
     "BATCH_MOVE_TALENT_TO_INTERVIEW": "批量加入拟面试人员",
     "CONFIRM_HIRE": "确认入职",
     "BATCH_CONFIRM_HIRE": "批量确认入职",
+    "UPDATE_OFFER_STATUS": "更新Offer状态",
     "DELETE_JOB": "删除岗位",
     "CREATE_REGION": "新增地区",
     "DELETE_REGION": "删除地区",

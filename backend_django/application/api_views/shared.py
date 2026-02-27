@@ -77,6 +77,7 @@ from ..serializers import (
     JobSerializer,
     LoginSerializer,
     MeSerializer,
+    PassedCandidateOfferStatusSerializer,
     OperationLogDetailSerializer,
     OperationLogListSerializer,
     OperationLogQuerySerializer,

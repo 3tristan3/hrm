@@ -158,6 +158,7 @@
           :filtered-items="filteredPassedCandidates"
           :job-categories="passedJobCategories"
           :status-options="passedStatusOptions"
+          :status-action-options="passedStatusActionOptions"
           :filters="passedFilters"
           :interview-status-class="interviewStatusClass"
           :interview-status-text="interviewStatusText"
@@ -168,6 +169,7 @@
           :loading="dataLoading.passed"
           @refresh="refreshPassedCandidates"
           @primary-action="confirmSelectedPassedHires"
+          @change-status="changePassedCandidateStatus"
           @reset-filters="resetPassedFilters"
           @open-detail="openApplicationFromOutcome"
           @update:selected-ids="selectedPassedIds = $event"
@@ -311,6 +313,7 @@ import ApplicationsTabPanel from "./components/ApplicationsTabPanel.vue";
 import { useAdminRouteSync } from "./composables/adminAppPage/useAdminRouteSync";
 import { createAdminModalSubmitters } from "./composables/adminAppPage/useAdminModalSubmitters";
 import { useAdminAppPage } from "./composables/useAdminAppPage";
+import { OFFER_STATUS_ACTION_OPTIONS } from "./utils/offerStatusTransition";
 
 const {
   toastRef, confirmRef, resolveMediaUrl, token,
@@ -354,7 +357,7 @@ const {
   addSelectedToTalentPool, addSelectedTalentToInterviewPool, refreshInterviewCandidates, changeInterviewPage,
   changePassedPage, changeTalentPage, changeInterviewPageSize, changePassedPageSize,
   changeTalentPageSize, changeOperationLogPage, changeOperationLogPageSize, refreshPassedCandidates,
-  confirmSelectedPassedHires, refreshTalentPoolCandidates, searchOperationLogs, refreshOperationLogs,
+  confirmSelectedPassedHires, changePassedCandidateStatus, refreshTalentPoolCandidates, searchOperationLogs, refreshOperationLogs,
   batchRemoveInterviewCandidates, removeInterviewCandidate, openApplicationFromInterview, openApplicationFromOutcome,
   openApplication, closeApplication, keyAttachmentCards, otherAttachmentFiles,
   openAttachment, detailSections,
@@ -363,6 +366,7 @@ const {
 const route = useRoute();
 const router = useRouter();
 const currentYear = new Date().getFullYear();
+const passedStatusActionOptions = OFFER_STATUS_ACTION_OPTIONS;
 
 useAdminRouteSync({
   route,

@@ -207,6 +207,14 @@ class InterviewCandidate(models.Model):
         (SMS_STATUS_SUCCESS, "发送成功"),
         (SMS_STATUS_FAILED, "发送失败"),
     ]
+    OFFER_STATUS_PENDING = "pending_hire"
+    OFFER_STATUS_CONFIRMED = "confirmed_hire"
+    OFFER_STATUS_REJECTED = "offer_rejected"
+    OFFER_STATUS_CHOICES = [
+        (OFFER_STATUS_PENDING, "待确认入职"),
+        (OFFER_STATUS_CONFIRMED, "已确认入职"),
+        (OFFER_STATUS_REJECTED, "拒绝offer"),
+    ]
 
     application = models.OneToOneField(
         Application,
@@ -229,6 +237,12 @@ class InterviewCandidate(models.Model):
     result_at = models.DateTimeField("结果记录时间", null=True, blank=True)
     is_hired = models.BooleanField("已确认入职", default=False)
     hired_at = models.DateTimeField("确认入职时间", null=True, blank=True)
+    offer_status = models.CharField(
+        "Offer状态",
+        max_length=30,
+        choices=OFFER_STATUS_CHOICES,
+        default=OFFER_STATUS_PENDING,
+    )
     note = models.TextField("备注", blank=True, default="")
     sms_status = models.CharField(
         "短信状态",
