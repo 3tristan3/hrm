@@ -1,11 +1,17 @@
 import { cursorFromLink } from "../../api/client";
-import { OFFER_STATUS_LABELS } from "../../utils/offerStatusTransition";
+import {
+  OFFER_STATUS,
+  OFFER_STATUS_LABELS,
+  canModifyOfferStatus,
+  resolveOfferStatus,
+} from "../../utils/offerStatusTransition";
 
 export const useAdminApplicationActions = ({
   selectedApplicationIds,
   selectedInterviewIds,
   selectedPassedIds,
   selectedTalentIds,
+  passedCandidates,
   activeTab,
   dataLoaded,
   interviewPagination,
@@ -248,18 +254,72 @@ export const useAdminApplicationActions = ({
 
   const confirmSelectedPassedHires = async () => {
     if (!selectedPassedIds.value.length) return;
+    const passedList = Array.isArray(passedCandidates?.value) ? passedCandidates.value : [];
+    const selectedCandidateMap = new Map(
+      passedList
+        .filter((item) => selectedPassedIds.value.includes(item?.id))
+        .map((item) => [item.id, item])
+    );
+    const pendingIds = selectedPassedIds.value.filter((candidateId) => {
+      const target = selectedCandidateMap.get(candidateId);
+      if (!target) return false;
+      return resolveOfferStatus(target) === OFFER_STATUS.PENDING;
+    });
+    const ignoredCount = selectedPassedIds.value.length - pendingIds.length;
+    if (!pendingIds.length) {
+      notifyError("仅支持对“待发offer”状态候选人执行发放offer");
+      return;
+    }
+    await runWithConfirm({
+      confirm: {
+        title: "发放offer",
+        content: `确认向已选 ${pendingIds.length} 人发放offer吗？`,
+        confirmText: "发放offer",
+        type: "default",
+      },
+      action: async () => {
+        const result = await interviewApi.batchConfirmHires(pendingIds);
+        const parts = [];
+        if (result.confirmed) parts.push(`发放 ${result.confirmed} 人`);
+        if (result.already_confirmed) parts.push(`已发 ${result.already_confirmed} 人`);
+        if (ignoredCount > 0) parts.push(`跳过 ${ignoredCount} 人`);
+        notifySuccess(parts.length ? `操作完成：${parts.join("，")}` : "操作完成");
+        selectedPassedIds.value = [];
+        await loadPassedCandidates(true, passedPagination.page || 1);
+      },
+    });
+  };
+
+  const confirmSelectedPassedOnboard = async () => {
+    if (!selectedPassedIds.value.length) return;
+    const passedList = Array.isArray(passedCandidates?.value) ? passedCandidates.value : [];
+    const selectedCandidateMap = new Map(
+      passedList
+        .filter((item) => selectedPassedIds.value.includes(item?.id))
+        .map((item) => [item.id, item])
+    );
+    const pendingOnboardIds = selectedPassedIds.value.filter((candidateId) => {
+      const target = selectedCandidateMap.get(candidateId);
+      if (!target) return false;
+      return resolveOfferStatus(target) === OFFER_STATUS.PENDING_ONBOARD;
+    });
+    const ignoredCount = selectedPassedIds.value.length - pendingOnboardIds.length;
+    if (!pendingOnboardIds.length) {
+      notifyError("仅支持对“待确认入职”状态候选人执行确认入职");
+      return;
+    }
     await runWithConfirm({
       confirm: {
         title: "确认入职",
-        content: `确认将已选 ${selectedPassedIds.value.length} 人标记为已录用吗？`,
+        content: `确认将已选 ${pendingOnboardIds.length} 人标记为“已确认入职”吗？`,
         confirmText: "确认入职",
         type: "default",
       },
       action: async () => {
-        const result = await interviewApi.batchConfirmHires(selectedPassedIds.value);
+        const result = await interviewApi.batchConfirmOnboard(pendingOnboardIds);
         const parts = [];
         if (result.confirmed) parts.push(`确认 ${result.confirmed} 人`);
-        if (result.already_confirmed) parts.push(`已确认 ${result.already_confirmed} 人`);
+        if (ignoredCount > 0) parts.push(`跳过 ${ignoredCount} 人`);
         notifySuccess(parts.length ? `操作完成：${parts.join("，")}` : "操作完成");
         selectedPassedIds.value = [];
         await loadPassedCandidates(true, passedPagination.page || 1);
@@ -271,6 +331,21 @@ export const useAdminApplicationActions = ({
     const candidateId = Number(item?.id || 0);
     const statusValue = String(nextStatus || "").trim();
     if (!Number.isFinite(candidateId) || candidateId <= 0 || !statusValue) return;
+    if (!canModifyOfferStatus(item)) {
+      notifyError("仅支持对“已发offer/待确认入职/拒绝offer”状态候选人修改后续状态");
+      return;
+    }
+    const allowedTargetStatuses = new Set([
+      OFFER_STATUS.REJECTED,
+      OFFER_STATUS.PENDING_ONBOARD,
+    ]);
+    if (!allowedTargetStatuses.has(statusValue)) {
+      notifyError("仅支持修改为“拒绝offer”或“待确认入职”");
+      return;
+    }
+    if (statusValue === resolveOfferStatus(item)) {
+      return;
+    }
     const statusLabel = OFFER_STATUS_LABELS[statusValue] || statusValue;
     await runWithConfirm({
       confirm: {
@@ -364,6 +439,7 @@ export const useAdminApplicationActions = ({
     changeOperationLogPageSize,
     refreshPassedCandidates,
     confirmSelectedPassedHires,
+    confirmSelectedPassedOnboard,
     changePassedCandidateStatus,
     refreshTalentPoolCandidates,
     searchOperationLogs,

@@ -295,6 +295,11 @@ def record_result(
         if result in (InterviewCandidate.RESULT_NEXT_ROUND, InterviewCandidate.RESULT_PENDING)
         else InterviewCandidate.STATUS_COMPLETED
     )
+    if result == InterviewCandidate.RESULT_PASS:
+        # 面试通过进入通过池时，Offer 状态统一回到待发放。
+        candidate.offer_status = InterviewCandidate.OFFER_STATUS_PENDING
+        candidate.is_hired = False
+        candidate.hired_at = None
     candidate.save(
         update_fields=[
             "result",
@@ -307,6 +312,9 @@ def record_result(
             "interviewer",
             "interview_location",
             "status",
+            "offer_status",
+            "is_hired",
+            "hired_at",
             "updated_at",
         ]
     )

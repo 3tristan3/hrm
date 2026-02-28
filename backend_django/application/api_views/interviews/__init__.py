@@ -12,7 +12,12 @@ from .batch import (
     AdminTalentPoolCandidateBatchAddView,
     AdminTalentPoolCandidateBatchToInterviewView,
 )
-from .hire import AdminPassedCandidateBatchConfirmHireView, AdminPassedCandidateOfferStatusView
+from .hire import (
+    AdminPassedCandidateBatchConfirmHireView,
+    AdminPassedCandidateBatchConfirmOnboardView,
+    AdminPassedCandidateOfferStatusView,
+    AdminPassedCandidateRetryOAPushView,
+)
 from .query import (
     AdminInterviewCandidateDetailView,
     AdminInterviewCandidateListView,
@@ -40,5 +45,7 @@ __all__ = [
     "AdminTalentPoolCandidateBatchAddView",
     "AdminTalentPoolCandidateBatchToInterviewView",
     "AdminPassedCandidateBatchConfirmHireView",
+    "AdminPassedCandidateBatchConfirmOnboardView",
     "AdminPassedCandidateOfferStatusView",
+    "AdminPassedCandidateRetryOAPushView",
 ]

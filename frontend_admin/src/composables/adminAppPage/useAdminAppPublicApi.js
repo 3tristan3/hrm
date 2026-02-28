@@ -52,7 +52,7 @@ export function createAdminAppPublicApi(args) {
     addSelectedToInterviewPool, addSelectedToTalentPool, addSelectedTalentToInterviewPool, refreshInterviewCandidates,
     changeInterviewPage, changePassedPage, changeTalentPage, changeInterviewPageSize,
     changePassedPageSize, changeTalentPageSize, changeOperationLogPage, changeOperationLogPageSize,
-    refreshPassedCandidates, confirmSelectedPassedHires, changePassedCandidateStatus, refreshTalentPoolCandidates, searchOperationLogs,
+    refreshPassedCandidates, confirmSelectedPassedHires, confirmSelectedPassedOnboard, changePassedCandidateStatus, refreshTalentPoolCandidates, searchOperationLogs,
     refreshOperationLogs, refreshInterviewModules, batchRemoveInterviewCandidates, removeInterviewCandidate,
     openApplicationFromInterview, openApplicationFromOutcome, openApplication, closeApplication,
     attachmentCardMeta, applicationAttachments, keyAttachmentCards, otherAttachmentFiles,
@@ -150,7 +150,7 @@ export function createAdminAppPublicApi(args) {
     toggleApplicationSelection, addSelectedToInterviewPool, addSelectedToTalentPool, addSelectedTalentToInterviewPool,
     refreshInterviewCandidates, changeInterviewPage, changePassedPage, changeTalentPage,
     changeInterviewPageSize, changePassedPageSize, changeTalentPageSize, changeOperationLogPage,
-    changeOperationLogPageSize, refreshPassedCandidates, confirmSelectedPassedHires, changePassedCandidateStatus, refreshTalentPoolCandidates,
+    changeOperationLogPageSize, refreshPassedCandidates, confirmSelectedPassedHires, confirmSelectedPassedOnboard, changePassedCandidateStatus, refreshTalentPoolCandidates,
     searchOperationLogs, refreshOperationLogs, refreshInterviewModules, batchRemoveInterviewCandidates,
     removeInterviewCandidate,
   };

@@ -8,8 +8,8 @@ export const useHireStatusFilter = (itemsRef, filtersRef, options = {}) => {
   const pendingValue = options.pendingValue || "pending_hire";
   const confirmedValue = options.confirmedValue || "confirmed_hire";
   const allLabel = options.allLabel || "全部状态";
-  const pendingLabel = options.pendingLabel || "待确认入职";
-  const confirmedLabel = options.confirmedLabel || "已确认入职";
+  const pendingLabel = options.pendingLabel || "待发offer";
+  const confirmedLabel = options.confirmedLabel || "已发offer";
   const statusLabelMap = {
     [pendingValue]: pendingLabel,
     [confirmedValue]: confirmedLabel,

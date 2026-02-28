@@ -30,7 +30,7 @@ class InterviewCandidateBatchRemoveSerializer(serializers.Serializer):
         return unique_ids
 
 class InterviewCandidateBatchConfirmHireSerializer(serializers.Serializer):
-    """批量确认入职入参。"""
+    """批量发放 offer 入参。"""
 
     interview_candidate_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
@@ -88,6 +88,15 @@ class InterviewCandidateListSerializer(serializers.ModelSerializer):
             "sms_provider_code",
             "sms_provider_message",
             "sms_message_id",
+            "oa_push_status",
+            "oa_push_retry_count",
+            "oa_push_last_attempt_at",
+            "oa_push_success_at",
+            "oa_push_request_id",
+            "oa_push_error_code",
+            "oa_push_error_message",
+            "oa_push_oa_code",
+            "oa_push_oa_message",
             "photo_url",
             "created_at",
             "updated_at",
@@ -152,6 +161,15 @@ class InterviewPassedCandidateListSerializer(serializers.ModelSerializer):
             "is_hired",
             "hired_at",
             "offer_status",
+            "oa_push_status",
+            "oa_push_retry_count",
+            "oa_push_last_attempt_at",
+            "oa_push_success_at",
+            "oa_push_request_id",
+            "oa_push_error_code",
+            "oa_push_error_message",
+            "oa_push_oa_code",
+            "oa_push_oa_message",
             "first_round_at",
             "first_round_score",
             "first_round_interviewer",
@@ -329,11 +347,15 @@ class PassedCandidateOfferStatusSerializer(serializers.Serializer):
 
     offer_status = serializers.ChoiceField(
         choices=[
-            InterviewCandidate.OFFER_STATUS_PENDING,
             InterviewCandidate.OFFER_STATUS_REJECTED,
+            InterviewCandidate.OFFER_STATUS_CONFIRMED,
         ]
     )
 
 
 class InterviewCandidateResendSmsSerializer(serializers.Serializer):
     """失败重发短信入参。"""
+
+
+class PassedCandidateRetryOAPushSerializer(serializers.Serializer):
+    """失败重发 OA 推送入参。"""

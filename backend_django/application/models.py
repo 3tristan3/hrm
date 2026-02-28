@@ -207,12 +207,24 @@ class InterviewCandidate(models.Model):
         (SMS_STATUS_SUCCESS, "发送成功"),
         (SMS_STATUS_FAILED, "发送失败"),
     ]
+    OA_PUSH_STATUS_IDLE = "idle"
+    OA_PUSH_STATUS_PENDING = "pending"
+    OA_PUSH_STATUS_SUCCESS = "success"
+    OA_PUSH_STATUS_FAILED = "failed"
+    OA_PUSH_STATUS_CHOICES = [
+        (OA_PUSH_STATUS_IDLE, "未推送"),
+        (OA_PUSH_STATUS_PENDING, "推送中"),
+        (OA_PUSH_STATUS_SUCCESS, "推送成功"),
+        (OA_PUSH_STATUS_FAILED, "推送失败"),
+    ]
     OFFER_STATUS_PENDING = "pending_hire"
+    OFFER_STATUS_ISSUED = "offer_issued"
     OFFER_STATUS_CONFIRMED = "confirmed_hire"
     OFFER_STATUS_REJECTED = "offer_rejected"
     OFFER_STATUS_CHOICES = [
-        (OFFER_STATUS_PENDING, "待确认入职"),
-        (OFFER_STATUS_CONFIRMED, "已确认入职"),
+        (OFFER_STATUS_PENDING, "待发offer"),
+        (OFFER_STATUS_ISSUED, "已发offer"),
+        (OFFER_STATUS_CONFIRMED, "待确认入职"),
         (OFFER_STATUS_REJECTED, "拒绝offer"),
     ]
 
@@ -258,6 +270,21 @@ class InterviewCandidate(models.Model):
     sms_provider_code = models.CharField("短信供应商状态码", max_length=50, blank=True, default="")
     sms_provider_message = models.CharField("短信供应商返回信息", max_length=255, blank=True, default="")
     sms_message_id = models.CharField("短信消息ID", max_length=100, blank=True, default="")
+    oa_push_status = models.CharField(
+        "OA推送状态",
+        max_length=20,
+        choices=OA_PUSH_STATUS_CHOICES,
+        default=OA_PUSH_STATUS_IDLE,
+    )
+    oa_push_retry_count = models.PositiveSmallIntegerField("OA推送重试次数", default=0)
+    oa_push_last_attempt_at = models.DateTimeField("OA推送最近尝试时间", null=True, blank=True)
+    oa_push_success_at = models.DateTimeField("OA推送成功时间", null=True, blank=True)
+    oa_push_request_id = models.CharField("OA流程请求ID", max_length=64, blank=True, default="")
+    oa_push_error_code = models.CharField("OA推送错误码", max_length=50, blank=True, default="")
+    oa_push_error_message = models.TextField("OA推送失败原因", blank=True, default="")
+    oa_push_oa_code = models.CharField("OA返回码", max_length=50, blank=True, default="")
+    oa_push_oa_message = models.CharField("OA返回信息", max_length=255, blank=True, default="")
+    oa_push_payload_snapshot = models.JSONField("OA推送请求快照", default=dict, blank=True)
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
 

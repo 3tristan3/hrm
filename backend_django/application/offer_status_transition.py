@@ -41,25 +41,53 @@ class OfferStatusTransitionService:
         ):
             raise OfferStatusTransitionError(
                 code="invalid_candidate_state",
-                error="仅支持对“已完成且通过”的候选人确认入职",
+                error="仅支持对“已完成且通过”的候选人发放offer",
             )
         if cls.resolve_offer_status(candidate) != InterviewCandidate.OFFER_STATUS_PENDING:
             raise OfferStatusTransitionError(
                 code="invalid_offer_status_for_confirm",
-                error="仅支持对“待确认入职”状态候选人执行确认入职",
+                error="仅支持对“待发offer”状态候选人执行发放offer",
             )
 
     @classmethod
     def apply_confirm_hire(
         cls,
         candidate: InterviewCandidate,
+    ):
+        cls.ensure_confirm_hire_eligible(candidate)
+        candidate.is_hired = False
+        candidate.hired_at = None
+        candidate.offer_status = InterviewCandidate.OFFER_STATUS_ISSUED
+
+    @classmethod
+    def ensure_confirm_onboard_eligible(cls, candidate: InterviewCandidate):
+        if (
+            candidate.status != InterviewCandidate.STATUS_COMPLETED
+            or candidate.result != InterviewCandidate.RESULT_PASS
+        ):
+            raise OfferStatusTransitionError(
+                code="invalid_candidate_state",
+                error="仅支持对“已完成且通过”的候选人确认入职",
+            )
+        if (
+            cls.resolve_offer_status(candidate) != InterviewCandidate.OFFER_STATUS_CONFIRMED
+            or bool(candidate.is_hired)
+        ):
+            raise OfferStatusTransitionError(
+                code="invalid_offer_status_for_onboard",
+                error="仅支持对“待确认入职”状态候选人执行确认入职",
+            )
+
+    @classmethod
+    def apply_confirm_onboard(
+        cls,
+        candidate: InterviewCandidate,
         *,
         confirmed_at=None,
     ):
-        cls.ensure_confirm_hire_eligible(candidate)
-        now = confirmed_at or timezone.now()
+        cls.ensure_confirm_onboard_eligible(candidate)
         candidate.is_hired = True
-        candidate.hired_at = now
+        candidate.hired_at = confirmed_at or timezone.now()
         candidate.offer_status = InterviewCandidate.OFFER_STATUS_CONFIRMED
 
     @classmethod
@@ -69,14 +97,26 @@ class OfferStatusTransitionService:
         next_status: str,
     ) -> str:
         before_status = cls.resolve_offer_status(candidate)
-        if (
-            before_status == InterviewCandidate.OFFER_STATUS_CONFIRMED
-            and next_status != before_status
-        ):
+        allowed_next_statuses = {
+            InterviewCandidate.OFFER_STATUS_REJECTED,
+            InterviewCandidate.OFFER_STATUS_CONFIRMED,
+        }
+        if next_status not in allowed_next_statuses:
             raise OfferStatusTransitionError(
-                code="confirmed_status_locked",
-                error="已确认入职为最终状态，不可修改",
-                details={"offer_status": ["当前候选人已确认入职，状态不可再修改"]},
+                code="invalid_offer_status_target",
+                error="仅支持修改为“拒绝offer”或“待确认入职”",
+                details={"offer_status": ["目标状态不在允许范围内"]},
+            )
+        allowed_before_statuses = {
+            InterviewCandidate.OFFER_STATUS_ISSUED,
+            InterviewCandidate.OFFER_STATUS_REJECTED,
+            InterviewCandidate.OFFER_STATUS_CONFIRMED,
+        }
+        if before_status not in allowed_before_statuses or bool(candidate.is_hired):
+            raise OfferStatusTransitionError(
+                code="invalid_offer_status_for_update",
+                error="仅支持对“已发offer/待确认入职/拒绝offer”状态候选人修改后续状态",
+                details={"offer_status": ["当前候选人状态不支持继续修改"]},
             )
         return before_status
 
@@ -91,12 +131,7 @@ class OfferStatusTransitionService:
             return before_status, False
 
         candidate.offer_status = next_status
-        if next_status == InterviewCandidate.OFFER_STATUS_CONFIRMED:
-            candidate.is_hired = True
-            if not candidate.hired_at:
-                candidate.hired_at = timezone.now()
-        else:
-            candidate.is_hired = False
-            candidate.hired_at = None
+        candidate.is_hired = False
+        candidate.hired_at = None
 
         return before_status, True

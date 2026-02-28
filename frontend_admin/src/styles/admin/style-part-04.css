@@ -162,6 +162,18 @@
   background: rgba(239, 68, 68, 0.18);
   color: #B91C1C;
 }
+.chip.chip-offer-pending {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+.chip.chip-offer-confirmed {
+  background: #FFEDD5;
+  color: #EA580C;
+}
+.chip.chip-offer-rejected {
+  background: #FEF3C7;
+  color: #CA8A04;
+}
 .account-password-modal {
   width: min(700px, 96vw);
   max-height: 92vh;

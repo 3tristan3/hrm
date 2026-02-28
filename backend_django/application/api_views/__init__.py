@@ -6,7 +6,7 @@ from .auth import RegisterView, LoginView, MeView, AdminUserListView, AdminUserP
 from .admin_regions_jobs import _RegionAdminQuerysetMixin, AdminRegionListView, AdminRegionDetailView, AdminRegionFieldListView, AdminRegionFieldDetailView, AdminJobListView, AdminJobDetailView, AdminJobBatchStatusView
 from .admin_applications import _ApplicationAdminQuerysetMixin, AdminApplicationListView, AdminApplicationDetailView
 from .admin_logs import operation_log_base_queryset, AdminOperationLogListView, AdminOperationLogDetailView, AdminOperationLogMetaView
-from .admin_interviews import _InterviewCandidateAdminQuerysetMixin, AdminInterviewCandidateListView, AdminInterviewMetaView, _InterviewOutcomeCandidateListView, AdminPassedCandidateListView, AdminTalentPoolCandidateListView, AdminInterviewCandidateDetailView, AdminInterviewCandidateScheduleView, AdminInterviewCandidateCancelScheduleView, AdminInterviewCandidateResultView, AdminInterviewCandidateResendSmsView, AdminInterviewCandidateBatchAddView, AdminInterviewCandidateBatchRemoveView, AdminTalentPoolCandidateBatchAddView, AdminTalentPoolCandidateBatchToInterviewView, AdminPassedCandidateBatchConfirmHireView, AdminPassedCandidateOfferStatusView
+from .admin_interviews import _InterviewCandidateAdminQuerysetMixin, AdminInterviewCandidateListView, AdminInterviewMetaView, _InterviewOutcomeCandidateListView, AdminPassedCandidateListView, AdminTalentPoolCandidateListView, AdminInterviewCandidateDetailView, AdminInterviewCandidateScheduleView, AdminInterviewCandidateCancelScheduleView, AdminInterviewCandidateResultView, AdminInterviewCandidateResendSmsView, AdminInterviewCandidateBatchAddView, AdminInterviewCandidateBatchRemoveView, AdminTalentPoolCandidateBatchAddView, AdminTalentPoolCandidateBatchToInterviewView, AdminPassedCandidateBatchConfirmHireView, AdminPassedCandidateBatchConfirmOnboardView, AdminPassedCandidateOfferStatusView, AdminPassedCandidateRetryOAPushView
 
 __all__ = [
     "HealthCheckView",
@@ -60,5 +60,7 @@ __all__ = [
     "AdminTalentPoolCandidateBatchAddView",
     "AdminTalentPoolCandidateBatchToInterviewView",
     "AdminPassedCandidateBatchConfirmHireView",
+    "AdminPassedCandidateBatchConfirmOnboardView",
     "AdminPassedCandidateOfferStatusView",
+    "AdminPassedCandidateRetryOAPushView",
 ]

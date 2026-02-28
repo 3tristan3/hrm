@@ -19,6 +19,15 @@
         >
           {{ primaryActionLabel }}<span v-if="selectedCount">（{{ selectedCount }}）</span>
         </button>
+        <button
+          v-if="showSecondaryAction"
+          :class="['btn', 'btn-sm', secondaryActionClass]"
+          type="button"
+          :disabled="secondaryActionDisabled || selectedCount === 0"
+          @click="$emit('secondary-action')"
+        >
+          {{ secondaryActionLabel }}<span v-if="selectedCount">（{{ selectedCount }}）</span>
+        </button>
         <button class="btn btn-sm btn-default" type="button" @click="$emit('refresh')">刷新列表</button>
       </div>
     </div>
@@ -181,6 +190,7 @@ const emit = defineEmits([
   "open-detail",
   "reset-filters",
   "primary-action",
+  "secondary-action",
   "change-status",
   "update:selected-ids",
   "update:is-all-visible-selected",
@@ -264,6 +274,22 @@ const props = defineProps({
     default: "btn-primary",
   },
   primaryActionDisabled: {
+    type: Boolean,
+    default: false,
+  },
+  showSecondaryAction: {
+    type: Boolean,
+    default: false,
+  },
+  secondaryActionLabel: {
+    type: String,
+    default: "",
+  },
+  secondaryActionClass: {
+    type: String,
+    default: "btn-default",
+  },
+  secondaryActionDisabled: {
     type: Boolean,
     default: false,
   },

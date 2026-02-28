@@ -117,6 +117,27 @@ class InterviewFlowServiceTests(TestCase):
         self.assertEqual(round_record.interviewer, "面试官A")
         self.assertEqual(round_record.interviewer_scores, [{"interviewer": "面试官A", "score": 92}])
 
+    def test_record_pass_result_resets_offer_status_to_pending(self):
+        candidate = self._create_candidate(
+            offer_status=InterviewCandidate.OFFER_STATUS_REJECTED,
+            is_hired=True,
+            hired_at=timezone.now(),
+        )
+        interview_at = timezone.now() + timedelta(hours=2)
+        schedule_interview(candidate, interview_at=interview_at, interviewer="面试官A")
+
+        record_result(
+            candidate,
+            result=InterviewCandidate.RESULT_PASS,
+            score=90,
+            result_note="通过后进入待发offer",
+        )
+        candidate.refresh_from_db()
+
+        self.assertEqual(candidate.offer_status, InterviewCandidate.OFFER_STATUS_PENDING)
+        self.assertFalse(candidate.is_hired)
+        self.assertIsNone(candidate.hired_at)
+
     def test_record_pending_result_keeps_candidate_in_flow(self):
         candidate = self._create_candidate()
         interview_at = timezone.now() + timedelta(hours=2)

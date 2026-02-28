@@ -15,7 +15,9 @@ from .views import (
     AdminOperationLogMetaView,
     AdminPassedCandidateListView,
     AdminPassedCandidateBatchConfirmHireView,
+    AdminPassedCandidateBatchConfirmOnboardView,
     AdminPassedCandidateOfferStatusView,
+    AdminPassedCandidateRetryOAPushView,
     AdminTalentPoolCandidateListView,
     AdminTalentPoolCandidateBatchAddView,
     AdminTalentPoolCandidateBatchToInterviewView,
@@ -122,9 +124,19 @@ urlpatterns = [
         name="admin-passed-candidates-batch-confirm-hire",
     ),
     path(
+        "admin/passed-candidates/batch-confirm-onboard/",
+        AdminPassedCandidateBatchConfirmOnboardView.as_view(),
+        name="admin-passed-candidates-batch-confirm-onboard",
+    ),
+    path(
         "admin/passed-candidates/<int:pk>/offer-status/",
         AdminPassedCandidateOfferStatusView.as_view(),
         name="admin-passed-candidate-offer-status",
+    ),
+    path(
+        "admin/passed-candidates/<int:pk>/retry-oa-push/",
+        AdminPassedCandidateRetryOAPushView.as_view(),
+        name="admin-passed-candidate-retry-oa-push",
     ),
     path(
         "admin/talent-pool-candidates/",

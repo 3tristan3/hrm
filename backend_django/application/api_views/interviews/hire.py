@@ -1,14 +1,14 @@
-"""面试确认入职视图子模块。"""
+"""面试通过人员 offer 发放视图子模块。"""
 from .shared import *
-from ...hire_push_temp import dispatch_temp_hire_push
 from ...offer_status_transition import (
     OfferStatusTransitionError,
     OfferStatusTransitionService,
 )
+from ...oa_push import dispatch_oa_push
 
 
 class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
-    """批量确认面试通过人员入职。"""
+    """批量发放面试通过人员 offer。"""
 
     def post(self, request: Request):
         serializer = InterviewCandidateBatchConfirmHireSerializer(data=request.data)
@@ -55,6 +55,129 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
             if invalid_state_ids:
                 return Response(
                     {
+                        "error": "仅支持对“已完成且通过”的候选人发放offer",
+                        "details": {"interview_candidate_ids": invalid_state_ids},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if invalid_offer_status_ids:
+                return Response(
+                    {
+                        "error": "仅支持对“待发offer”状态候选人执行发放offer",
+                        "details": {"interview_candidate_ids": invalid_offer_status_ids},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            confirmed = 0
+            already_confirmed = 0
+            confirmed_candidate_ids = []
+
+            for candidate_id in interview_candidate_ids:
+                candidate = candidate_map[candidate_id]
+                OfferStatusTransitionService.apply_confirm_hire(candidate)
+                candidate.save(update_fields=["is_hired", "hired_at", "offer_status", "updated_at"])
+                confirmed += 1
+                confirmed_candidate_ids.append(candidate.id)
+
+        for candidate_id in confirmed_candidate_ids:
+            candidate = candidate_map[candidate_id]
+            application = candidate.application
+            self._write_operation_log(
+                request,
+                user=request.user,
+                module="interviews",
+                action="CONFIRM_HIRE",
+                target_type="interview_candidate",
+                target_id=candidate.id,
+                target_label=application.name,
+                summary=f"发放offer：{application.name}",
+                details={
+                    "interview_candidate_id": candidate.id,
+                    "application_id": application.id,
+                    "already_confirmed": False,
+                    "is_hired": candidate.is_hired,
+                    "hired_at": candidate.hired_at.isoformat() if candidate.hired_at else "",
+                    "offer_status": candidate.offer_status,
+                },
+                application=application,
+                interview_candidate=candidate,
+                region=application.region,
+            )
+
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="BATCH_CONFIRM_HIRE",
+            target_type="interview_candidate_batch",
+            target_label=f"{len(interview_candidate_ids)}名候选人",
+            summary=f"批量发放offer：发放 {confirmed}，已发 {already_confirmed}",
+            details={
+                "interview_candidate_ids": interview_candidate_ids,
+                "confirmed": confirmed,
+                "already_confirmed": already_confirmed,
+                "total": len(interview_candidate_ids),
+            },
+        )
+
+        return Response(
+            {
+                "confirmed": confirmed,
+                "already_confirmed": already_confirmed,
+                "total": len(interview_candidate_ids),
+            }
+        )
+
+
+class AdminPassedCandidateBatchConfirmOnboardView(AdminScopedMixin, APIView):
+    """批量确认面试通过人员入职。"""
+
+    def post(self, request: Request):
+        serializer = InterviewCandidateBatchConfirmHireSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        interview_candidate_ids = serializer.validated_data["interview_candidate_ids"]
+        region_id = self._user_region_scope()
+
+        with transaction.atomic():
+            queryset = InterviewCandidate.objects.select_for_update().select_related(
+                "application",
+                "application__region",
+            ).filter(id__in=interview_candidate_ids)
+            if region_id:
+                queryset = queryset.filter(application__region_id=region_id)
+
+            candidate_map = {item.id: item for item in queryset}
+            missing_ids = sorted(set(interview_candidate_ids) - set(candidate_map.keys()))
+            if missing_ids:
+                return Response(
+                    {
+                        "error": "包含无权限或不存在的面试通过人员",
+                        "details": {"interview_candidate_ids": missing_ids},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            invalid_state_ids = []
+            invalid_offer_status_ids = []
+            for candidate_id in interview_candidate_ids:
+                candidate = candidate_map[candidate_id]
+                try:
+                    OfferStatusTransitionService.ensure_confirm_onboard_eligible(candidate)
+                except OfferStatusTransitionError as exc:
+                    if exc.code == "invalid_candidate_state":
+                        invalid_state_ids.append(candidate_id)
+                    elif exc.code == "invalid_offer_status_for_onboard":
+                        invalid_offer_status_ids.append(candidate_id)
+
+            if invalid_state_ids:
+                return Response(
+                    {
                         "error": "仅支持对“已完成且通过”的候选人确认入职",
                         "details": {"interview_candidate_ids": invalid_state_ids},
                     },
@@ -71,68 +194,32 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
 
             now = timezone.now()
             confirmed = 0
-            already_confirmed = 0
-            candidate_audit_rows = []
-
+            confirmed_candidate_ids = []
             for candidate_id in interview_candidate_ids:
                 candidate = candidate_map[candidate_id]
-                OfferStatusTransitionService.apply_confirm_hire(candidate, confirmed_at=now)
+                OfferStatusTransitionService.apply_confirm_onboard(candidate, confirmed_at=now)
                 candidate.save(update_fields=["is_hired", "hired_at", "offer_status", "updated_at"])
                 confirmed += 1
+                confirmed_candidate_ids.append(candidate.id)
 
-                candidate_audit_rows.append(
-                    {
-                        "candidate": candidate,
-                        "already_confirmed": False,
-                    }
-                )
-
-        for row in candidate_audit_rows:
-            candidate = row["candidate"]
-            row["oa_push"] = dispatch_temp_hire_push(candidate)
-
-        oa_push_summary = {
-            "enabled": any(bool(item.get("oa_push", {}).get("enabled")) for item in candidate_audit_rows),
-            "success": 0,
-            "failed": 0,
-            "skipped": 0,
-        }
-
-        for row in candidate_audit_rows:
-            push_item = row.get("oa_push") or {}
-            if not push_item.get("enabled"):
-                oa_push_summary["skipped"] += 1
-            elif push_item.get("success"):
-                oa_push_summary["success"] += 1
-            else:
-                oa_push_summary["failed"] += 1
-
-        for row in candidate_audit_rows:
-            candidate = row["candidate"]
+        for candidate_id in confirmed_candidate_ids:
+            candidate = candidate_map[candidate_id]
             application = candidate.application
-            is_existing = row["already_confirmed"]
-            summary = (
-                f"确认入职（已确认）：{application.name}"
-                if is_existing
-                else f"确认入职：{application.name}"
-            )
             self._write_operation_log(
                 request,
                 user=request.user,
                 module="interviews",
-                action="CONFIRM_HIRE",
+                action="CONFIRM_ONBOARD",
                 target_type="interview_candidate",
                 target_id=candidate.id,
                 target_label=application.name,
-                summary=summary,
+                summary=f"确认入职：{application.name}",
                 details={
                     "interview_candidate_id": candidate.id,
                     "application_id": application.id,
-                    "already_confirmed": is_existing,
                     "is_hired": candidate.is_hired,
                     "hired_at": candidate.hired_at.isoformat() if candidate.hired_at else "",
                     "offer_status": candidate.offer_status,
-                    "oa_push": row.get("oa_push") or {},
                 },
                 application=application,
                 interview_candidate=candidate,
@@ -143,25 +230,148 @@ class AdminPassedCandidateBatchConfirmHireView(AdminScopedMixin, APIView):
             request,
             user=request.user,
             module="interviews",
-            action="BATCH_CONFIRM_HIRE",
+            action="BATCH_CONFIRM_ONBOARD",
             target_type="interview_candidate_batch",
             target_label=f"{len(interview_candidate_ids)}名候选人",
-            summary=f"批量确认入职：确认 {confirmed}，已确认 {already_confirmed}",
+            summary=f"批量确认入职：确认 {confirmed}",
             details={
                 "interview_candidate_ids": interview_candidate_ids,
                 "confirmed": confirmed,
-                "already_confirmed": already_confirmed,
                 "total": len(interview_candidate_ids),
-                "oa_push": oa_push_summary,
             },
         )
+
+        oa_push_success = 0
+        oa_push_failed = 0
+        oa_push_failed_items = []
+        for candidate_id in confirmed_candidate_ids:
+            pushed_candidate, push_result = dispatch_oa_push(candidate_id, is_retry=False)
+            application = pushed_candidate.application
+            if push_result.success:
+                oa_push_success += 1
+                self._write_operation_log(
+                    request,
+                    user=request.user,
+                    module="interviews",
+                    action="OA_PUSH_SUCCESS",
+                    target_type="interview_candidate",
+                    target_id=pushed_candidate.id,
+                    target_label=application.name,
+                    summary=f"OA推送成功：{application.name}",
+                    details={
+                        "interview_candidate_id": pushed_candidate.id,
+                        "application_id": application.id,
+                        "request_id": push_result.request_id,
+                    },
+                    application=application,
+                    interview_candidate=pushed_candidate,
+                    region=application.region,
+                )
+                continue
+
+            oa_push_failed += 1
+            oa_push_failed_items.append(
+                {
+                    "interview_candidate_id": pushed_candidate.id,
+                    "application_id": application.id,
+                    "error_code": push_result.error_code,
+                    "error_message": push_result.error_message,
+                    "retryable": push_result.retryable,
+                }
+            )
+            self._write_operation_log(
+                request,
+                user=request.user,
+                module="interviews",
+                action="OA_PUSH_FAILED",
+                target_type="interview_candidate",
+                target_id=pushed_candidate.id,
+                target_label=application.name,
+                summary=f"OA推送失败：{application.name}",
+                details={
+                    "interview_candidate_id": pushed_candidate.id,
+                    "application_id": application.id,
+                    "error_code": push_result.error_code,
+                    "error_message": push_result.error_message,
+                    "retryable": push_result.retryable,
+                    "oa_code": push_result.oa_code,
+                    "oa_message": push_result.oa_message,
+                },
+                application=application,
+                interview_candidate=pushed_candidate,
+                region=application.region,
+            )
 
         return Response(
             {
                 "confirmed": confirmed,
-                "already_confirmed": already_confirmed,
                 "total": len(interview_candidate_ids),
-                "oa_push": oa_push_summary,
+                "oa_push": {
+                    "success": oa_push_success,
+                    "failed": oa_push_failed,
+                    "failed_items": oa_push_failed_items,
+                },
+            }
+        )
+
+
+class AdminPassedCandidateRetryOAPushView(AdminScopedMixin, APIView):
+    """重发单个候选人的 OA 推送。"""
+
+    def post(self, request: Request, pk: int):
+        serializer = PassedCandidateRetryOAPushSerializer(data=request.data or {})
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        region_id = self._user_region_scope()
+        queryset = InterviewCandidate.objects.select_related(
+            "application",
+            "application__region",
+        ).filter(
+            id=pk,
+            status=InterviewCandidate.STATUS_COMPLETED,
+            result=InterviewCandidate.RESULT_PASS,
+        )
+        if region_id:
+            queryset = queryset.filter(application__region_id=region_id)
+        candidate = get_object_or_404(queryset)
+
+        pushed_candidate, push_result = dispatch_oa_push(candidate.id, is_retry=True)
+        application = pushed_candidate.application
+        self._write_operation_log(
+            request,
+            user=request.user,
+            module="interviews",
+            action="OA_PUSH_RETRY",
+            target_type="interview_candidate",
+            target_id=pushed_candidate.id,
+            target_label=application.name,
+            summary=f"重发OA推送：{application.name}",
+            details={
+                "interview_candidate_id": pushed_candidate.id,
+                "application_id": application.id,
+                "success": push_result.success,
+                "retryable": push_result.retryable,
+                "request_id": push_result.request_id,
+                "error_code": push_result.error_code,
+                "error_message": push_result.error_message,
+                "oa_code": push_result.oa_code,
+                "oa_message": push_result.oa_message,
+            },
+            application=application,
+            interview_candidate=pushed_candidate,
+            region=application.region,
+            result=OperationLog.RESULT_SUCCESS if push_result.success else OperationLog.RESULT_FAILED,
+        )
+        output = InterviewPassedCandidateListSerializer(pushed_candidate, context={"request": request})
+        return Response(
+            {
+                "message": "重发完成" if push_result.success else "重发失败",
+                "oa_push": push_result.to_payload(),
+                "candidate": output.data,
             }
         )
 

@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 
-from .env_utils import get_bool, get_int, get_list
+from .env_utils import get_bool, get_int, get_json, get_list
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -148,6 +148,48 @@ if get_bool("USE_X_FORWARDED_PROTO", True):
 
 SESSION_COOKIE_SECURE = get_bool("SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = get_bool("CSRF_COOKIE_SECURE", not DEBUG)
+
+OA_PUSH_ENABLED = get_bool("OA_PUSH_ENABLED", False)
+OA_PUSH_BASE_URL = str(os.getenv("OA_PUSH_BASE_URL", "") or "").strip()
+OA_PUSH_APP_ID = str(os.getenv("OA_PUSH_APP_ID", "") or "").strip()
+OA_PUSH_SECRIT = str(os.getenv("OA_PUSH_SECRIT", "") or "").strip()
+OA_PUSH_SPK = str(os.getenv("OA_PUSH_SPK", "") or "").strip()
+OA_PUSH_USER_ID = str(os.getenv("OA_PUSH_USER_ID", "") or "").strip()
+OA_PUSH_WORKFLOW_ID = str(os.getenv("OA_PUSH_WORKFLOW_ID", "") or "").strip()
+OA_PUSH_TOKEN_TTL_SECONDS = get_int("OA_PUSH_TOKEN_TTL_SECONDS", 1800)
+OA_PUSH_REQUEST_TIMEOUT_SECONDS = get_int("OA_PUSH_REQUEST_TIMEOUT_SECONDS", 10)
+OA_PUSH_REQUEST_NAME_TEMPLATE = str(
+    os.getenv("OA_PUSH_REQUEST_NAME_TEMPLATE", "入职确认-{name}") or "入职确认-{name}"
+)
+OA_PUSH_REQUEST_LEVEL = str(os.getenv("OA_PUSH_REQUEST_LEVEL", "") or "").strip()
+OA_PUSH_REMARK_TEMPLATE = str(os.getenv("OA_PUSH_REMARK_TEMPLATE", "") or "").strip()
+OA_PUSH_CONTENT_TYPE = str(
+    os.getenv(
+        "OA_PUSH_CONTENT_TYPE",
+        "application/x-www-form-urlencoded; charset=utf-8",
+    )
+    or "application/x-www-form-urlencoded; charset=utf-8"
+).strip()
+OA_PUSH_AUTO_RETRY_TIMES = get_int("OA_PUSH_AUTO_RETRY_TIMES", 1)
+_oa_push_main_mappings = get_json("OA_PUSH_MAIN_FIELD_MAPPINGS", [])
+OA_PUSH_MAIN_FIELD_MAPPINGS = (
+    _oa_push_main_mappings if isinstance(_oa_push_main_mappings, list) else []
+)
+_oa_push_detail_template = get_json("OA_PUSH_DETAIL_DATA_TEMPLATE", [])
+OA_PUSH_DETAIL_DATA_TEMPLATE = (
+    _oa_push_detail_template if isinstance(_oa_push_detail_template, list) else []
+)
+_oa_push_other_params = get_json(
+    "OA_PUSH_OTHER_PARAMS",
+    {
+        "isnextflow": "1",
+        "delReqFlowFaild": "1",
+        "requestSecLevel": "",
+        "requestSecValidity": "",
+        "isVerifyPer": "1",
+    },
+)
+OA_PUSH_OTHER_PARAMS = _oa_push_other_params if isinstance(_oa_push_other_params, dict) else {}
 
 INTERVIEW_SMS_ENABLED = get_bool("INTERVIEW_SMS_ENABLED", False)
 INTERVIEW_SMS_PROVIDER = str(os.getenv("INTERVIEW_SMS_PROVIDER", "aliyun") or "aliyun").strip().lower()

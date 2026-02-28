@@ -78,6 +78,14 @@ export const createInterviewApi = ({ adminBase, request }) => ({
       }),
     });
   },
+  async batchConfirmOnboard(candidateIds) {
+    return request(`${adminBase}/passed-candidates/batch-confirm-onboard/`, {
+      method: "POST",
+      body: JSON.stringify({
+        interview_candidate_ids: candidateIds,
+      }),
+    });
+  },
   async updatePassedCandidateOfferStatus(id, payload) {
     return request(`${adminBase}/passed-candidates/${id}/offer-status/`, {
       method: "POST",

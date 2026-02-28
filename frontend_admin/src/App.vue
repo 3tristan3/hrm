@@ -169,6 +169,7 @@
           :loading="dataLoading.passed"
           @refresh="refreshPassedCandidates"
           @primary-action="confirmSelectedPassedHires"
+          @secondary-action="confirmSelectedPassedOnboard"
           @change-status="changePassedCandidateStatus"
           @reset-filters="resetPassedFilters"
           @open-detail="openApplicationFromOutcome"
@@ -357,7 +358,7 @@ const {
   addSelectedToTalentPool, addSelectedTalentToInterviewPool, refreshInterviewCandidates, changeInterviewPage,
   changePassedPage, changeTalentPage, changeInterviewPageSize, changePassedPageSize,
   changeTalentPageSize, changeOperationLogPage, changeOperationLogPageSize, refreshPassedCandidates,
-  confirmSelectedPassedHires, changePassedCandidateStatus, refreshTalentPoolCandidates, searchOperationLogs, refreshOperationLogs,
+  confirmSelectedPassedHires, confirmSelectedPassedOnboard, changePassedCandidateStatus, refreshTalentPoolCandidates, searchOperationLogs, refreshOperationLogs,
   batchRemoveInterviewCandidates, removeInterviewCandidate, openApplicationFromInterview, openApplicationFromOutcome,
   openApplication, closeApplication, keyAttachmentCards, otherAttachmentFiles,
   openAttachment, detailSections,

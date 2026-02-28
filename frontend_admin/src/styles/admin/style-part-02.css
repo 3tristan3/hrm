@@ -161,6 +161,16 @@
 .btn-default:hover {
   background: #F1F5F9;
 }
+.btn-onboard {
+  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+  border-color: #1D4ED8;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(29, 78, 216, 0.24);
+}
+.btn-onboard:hover {
+  background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+  border-color: #1E40AF;
+}
 .btn-activate {
   background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%);
   border-color: #16A34A;
