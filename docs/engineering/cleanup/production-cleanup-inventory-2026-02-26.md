@@ -17,10 +17,8 @@
 
 ## B. 明确“开发/联调/演示”用途（生产可剥离，分批执行中）
 
-- `backend_django/application/api_views/public.py` 的 `MockOAView` 与路由 `POST /api/application/mock-oa/`：
   - 用途：联调模拟。
   - 现状：前端未检索到调用。（Phase2 Batch1 已移除）
-- `backend_django/.env.example` 中 `OA_API_URL=http://127.0.0.1:8000/api/application/mock-oa/` 注释：
   - 用途：本地联调提示，非生产配置。
   - 现状：已从环境示例中移除该提示。（Phase2 Batch1 已完成）
 - `backend_django/application/management/commands/reset_app_data.py`：
@@ -66,6 +64,6 @@
 ## 建议剥离顺序
 
 1. A 类已完成：仅清理本地垃圾与缓存（不改业务代码）。
-2. B 类 Phase2 Batch1 已完成：移除 `mock-oa` 与造数/重置命令。
+2. B 类 Phase2 Batch1 已完成：移除联调用模拟接口与造数/重置命令。
 3. 下一步做 B 类剩余项：仅保留本地自用脚本策略确认（如 `start_all.ps1` 是否继续本地保留）。
 4. 最后做 C 类：删除历史兼容残留，并回归前端构建验证。

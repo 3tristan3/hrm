@@ -39,7 +39,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "oa_bridge.urls"
+ROOT_URLCONF = "backend_core.urls"
 
 TEMPLATES = [
     {
@@ -57,7 +57,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "oa_bridge.wsgi.application"
+WSGI_APPLICATION = "backend_core.wsgi.application"
 
 DB_ENGINE = os.getenv("DB_ENGINE", "mysql").lower()
 DB_CONN_MAX_AGE = get_int("DB_CONN_MAX_AGE", 60)
@@ -148,19 +148,6 @@ if get_bool("USE_X_FORWARDED_PROTO", True):
 
 SESSION_COOKIE_SECURE = get_bool("SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = get_bool("CSRF_COOKIE_SECURE", not DEBUG)
-
-OA_ENABLED = get_bool("OA_ENABLED", False)
-OA_BASE_URL = str(os.getenv("OA_BASE_URL", "") or "").strip()
-OA_APP_ID = str(os.getenv("OA_APP_ID", "") or "").strip()
-OA_SECRIT = str(os.getenv("OA_SECRIT", "") or "").strip()
-OA_SPK = str(os.getenv("OA_SPK", "") or "").strip()
-OA_USER_ID = str(os.getenv("OA_USER_ID", "") or "").strip()
-OA_WORKFLOW_ID = str(os.getenv("OA_WORKFLOW_ID", "") or "").strip()
-OA_TOKEN_TTL_SECONDS = get_int("OA_TOKEN_TTL_SECONDS", 1800)
-OA_REQUEST_TIMEOUT_SECONDS = get_int("OA_REQUEST_TIMEOUT_SECONDS", 10)
-OA_REQUEST_NAME_TEMPLATE = str(os.getenv("OA_REQUEST_NAME_TEMPLATE", "入职确认-{name}") or "入职确认-{name}")
-OA_HIRE_NAME_FIELD = str(os.getenv("OA_HIRE_NAME_FIELD", "xm") or "xm").strip()
-OA_HIRE_PHONE_FIELD = str(os.getenv("OA_HIRE_PHONE_FIELD", "sjh") or "sjh").strip()
 
 INTERVIEW_SMS_ENABLED = get_bool("INTERVIEW_SMS_ENABLED", False)
 INTERVIEW_SMS_PROVIDER = str(os.getenv("INTERVIEW_SMS_PROVIDER", "aliyun") or "aliyun").strip().lower()
