@@ -1,7 +1,9 @@
 """按职责拆分的视图模块。"""
 from .shared import *
+from django.db import IntegrityError
 from django.http import HttpResponseRedirect
 from rest_framework import serializers
+from ..models import UserProfile
 
 from ..oa_sso import (
     build_oa_sso_redirect_url,
@@ -89,6 +91,40 @@ class OALoginExchangeSerializer(serializers.Serializer):
     ticket = serializers.CharField(max_length=1024)
 
 
+def _resolve_oa_auto_create_region() -> Region | None:
+    region_code = str(getattr(settings, "OA_SSO_AUTO_CREATE_REGION_CODE", "") or "").strip()
+    active_regions = Region.objects.filter(is_active=True)
+    if region_code:
+        return active_regions.filter(code__iexact=region_code).first()
+    return active_regions.order_by("order", "id").first()
+
+
+def _resolve_or_create_oa_user(username: str) -> tuple[object | None, str]:
+    matched_user = User.objects.filter(username__iexact=username).first()
+    if matched_user:
+        if not matched_user.is_active:
+            return None, "inactive"
+        return matched_user, ""
+
+    if not bool(getattr(settings, "OA_SSO_AUTO_CREATE_USER", False)):
+        return None, "not_found"
+
+    region = _resolve_oa_auto_create_region()
+    if not region:
+        return None, "region_unavailable"
+
+    try:
+        with transaction.atomic():
+            created_user = User.objects.create_user(username=username, password=None)
+            UserProfile.objects.create(user=created_user, region=region, can_view_all=False)
+            return created_user, ""
+    except IntegrityError:
+        concurrent_user = User.objects.filter(username__iexact=username, is_active=True).first()
+        if concurrent_user:
+            return concurrent_user, ""
+        return None, "not_found"
+
+
 class OALoginEntryView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -122,8 +158,13 @@ class OALoginEntryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        matched_user = User.objects.filter(username__iexact=username, is_active=True).first()
+        matched_user, resolve_status = _resolve_or_create_oa_user(username)
         if not matched_user:
+            if resolve_status == "region_unavailable":
+                return Response(
+                    {"error": "未配置可用地区，无法自动创建账号", "error_code": "OA_SSO_REGION_UNAVAILABLE"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             return Response(
                 {"error": "HRM账号不存在或已禁用", "error_code": "OA_SSO_USER_NOT_FOUND"},
                 status=status.HTTP_404_NOT_FOUND,

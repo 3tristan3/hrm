@@ -220,6 +220,62 @@ class OASSOApiTests(APITestCase):
     @override_settings(
         OA_SSO_ENABLED=True,
         OA_SSO_ALLOWED_APPIDS=["hrm"],
+        OA_SSO_AUTO_CREATE_USER=True,
+        OA_SSO_AUTO_CREATE_REGION_CODE="oa-sso-region",
+    )
+    def test_oa_entry_auto_creates_user_when_not_exists(self):
+        auto_username = "oa_auto_create_user"
+        self.assertFalse(self.user_model.objects.filter(username=auto_username).exists())
+
+        entry_response = self.client.post(
+            reverse("auth-oa-entry"),
+            data={
+                "loginid": auto_username,
+                "appid": "hrm",
+                "mode": "json",
+                "next": "/login",
+            },
+            format="json",
+        )
+        self.assertEqual(entry_response.status_code, 200)
+        ticket = str(entry_response.json().get("ticket") or "")
+        self.assertTrue(ticket)
+
+        created_user = self.user_model.objects.filter(username=auto_username, is_active=True).first()
+        self.assertIsNotNone(created_user)
+        self.assertEqual(created_user.profile.region_id, self.region.id)
+        self.assertFalse(created_user.profile.can_view_all)
+
+        exchange_response = self.client.post(
+            reverse("auth-oa-exchange"),
+            data={"ticket": ticket},
+            format="json",
+        )
+        self.assertEqual(exchange_response.status_code, 200)
+        self.assertEqual(exchange_response.json().get("username"), auto_username)
+
+    @override_settings(
+        OA_SSO_ENABLED=True,
+        OA_SSO_ALLOWED_APPIDS=["hrm"],
+        OA_SSO_AUTO_CREATE_USER=True,
+        OA_SSO_AUTO_CREATE_REGION_CODE="oa-sso-region",
+    )
+    def test_oa_entry_auto_create_requires_active_region(self):
+        self.region.is_active = False
+        self.region.save(update_fields=["is_active"])
+
+        response = self.client.post(
+            reverse("auth-oa-entry"),
+            data={"loginid": "oa_new_without_region", "appid": "hrm"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertEqual(payload.get("error_code"), "OA_SSO_REGION_UNAVAILABLE")
+
+    @override_settings(
+        OA_SSO_ENABLED=True,
+        OA_SSO_ALLOWED_APPIDS=["hrm"],
         OA_SSO_ALLOWED_IPS=["10.10.10.10"],
     )
     def test_oa_entry_uses_x_real_ip_over_spoofed_xff(self):
