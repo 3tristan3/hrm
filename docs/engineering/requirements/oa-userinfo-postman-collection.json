@@ -1,0 +1,185 @@
+{
+  "info": {
+    "_postman_id": "f2a6c53d-6e49-4f5b-9e2a-ecology-oa-userinfo",
+    "name": "OA 人员信息联调（HRM）",
+    "description": "用于验证 Ecology 人员信息接口是否可按 loginid 查询到姓名（lastname）。\n\n使用前请先导入环境文件 oa-userinfo-postman-environment.json，并填写变量。\n\n请求顺序建议：\n1. OA-获取Token(applytoken)\n2. OA-按登录名获取人员信息(JSON)\n3. 若 JSON 失败，再试 OA-按登录名获取人员信息(表单)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "OA-获取Token(applytoken)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "appid",
+            "value": "{{oa_appid}}",
+            "type": "text"
+          },
+          {
+            "key": "secret",
+            "value": "{{oa_applytoken_secret_encrypted}}",
+            "type": "text"
+          },
+          {
+            "key": "time",
+            "value": "{{oa_token_ttl}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded; charset=utf-8",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{oa_base_url}}/api/ec/dev/auth/applytoken",
+          "host": [
+            "{{oa_base_url}}"
+          ],
+          "path": [
+            "api",
+            "ec",
+            "dev",
+            "auth",
+            "applytoken"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "let data = {};",
+              "try { data = pm.response.json(); } catch (e) {}",
+              "const token = (data && data.token) || (data && data.data && data.data.token) || '';",
+              "if (token) {",
+              "  pm.environment.set('oa_token', String(token));",
+              "}",
+              "pm.test('applytoken 返回成功码', function () {",
+              "  pm.expect(String(data.code || '')).to.be.oneOf(['0', '1']);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "OA-按登录名获取人员信息(JSON)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "appid",
+            "value": "{{oa_appid}}",
+            "type": "text"
+          },
+          {
+            "key": "token",
+            "value": "{{oa_token}}",
+            "type": "text"
+          },
+          {
+            "key": "userid",
+            "value": "{{oa_userid_encrypted}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json; charset=utf-8",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"params\": {\n    \"loginid\": \"{{oa_loginid}}\",\n    \"pagesize\": 1,\n    \"curpage\": 1\n  }\n}"
+        },
+        "url": {
+          "raw": "{{oa_base_url}}/api/hrm/resful/getHrmUserInfoWithPage",
+          "host": [
+            "{{oa_base_url}}"
+          ],
+          "path": [
+            "api",
+            "hrm",
+            "resful",
+            "getHrmUserInfoWithPage"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "let data = {};",
+              "try { data = pm.response.json(); } catch (e) {}",
+              "const list = (data && data.data && data.data.dataList) || [];",
+              "if (list.length > 0) {",
+              "  const user = list[0] || {};",
+              "  pm.environment.set('oa_real_name', String(user.lastname || ''));",
+              "  pm.environment.set('oa_department_name', String(user.departmentname || ''));",
+              "}",
+              "pm.test('返回 dataList', function () {",
+              "  pm.expect(Array.isArray(list)).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "OA-按登录名获取人员信息(表单)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "appid",
+            "value": "{{oa_appid}}",
+            "type": "text"
+          },
+          {
+            "key": "token",
+            "value": "{{oa_token}}",
+            "type": "text"
+          },
+          {
+            "key": "userid",
+            "value": "{{oa_userid_encrypted}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded; charset=utf-8",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "params",
+              "value": "{\"loginid\":\"{{oa_loginid}}\",\"pagesize\":1,\"curpage\":1}",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{oa_base_url}}/api/hrm/resful/getHrmUserInfoWithPage",
+          "host": [
+            "{{oa_base_url}}"
+          ],
+          "path": [
+            "api",
+            "hrm",
+            "resful",
+            "getHrmUserInfoWithPage"
+          ]
+        }
+      }
+    }
+  ]
+}

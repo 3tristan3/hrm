@@ -208,6 +208,7 @@ export const useAdminSessionActions = ({
     resetOperationLogMeta();
     operationLogPagination.pageSize = LIST_PAGE_SIZE;
     userProfile.can_view_all = false;
+    userProfile.real_name = "";
     userProfile.region_name = "";
     userProfile.region_id = null;
     userProfile.is_superuser = false;

@@ -17,6 +17,7 @@ from ..oa_sso import (
     pick_oa_sso_username,
     resolve_oa_sso_client_ip,
 )
+from ..oa_profile_sync import sync_oa_user_real_name
 
 class RegisterView(APIView):
     def post(self, request: Request):
@@ -169,6 +170,8 @@ class OALoginEntryView(APIView):
                 {"error": "HRM账号不存在或已禁用", "error_code": "OA_SSO_USER_NOT_FOUND"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        # OA 姓名同步失败不阻断主登录流程。
+        sync_oa_user_real_name(matched_user, loginid=username)
 
         ticket = create_oa_sso_login_ticket(
             user_id=matched_user.id,
@@ -256,6 +259,7 @@ class MeView(APIView):
         serializer = MeSerializer(
             {
                 "username": request.user.username,
+                "real_name": str(request.user.first_name or ""),
                 "is_superuser": request.user.is_superuser,
                 "profile": profile,
             }

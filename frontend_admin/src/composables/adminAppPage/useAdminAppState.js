@@ -114,6 +114,7 @@ export function createAdminAppState() {
   const interviewMeta = reactive(createInterviewMeta());
   const users = ref([]);
   const userProfile = reactive({
+    real_name: "",
     can_view_all: false,
     region_name: "",
     region_id: null,

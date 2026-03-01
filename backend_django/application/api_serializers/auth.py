@@ -65,6 +65,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class MeSerializer(serializers.Serializer):
     username = serializers.CharField()
+    real_name = serializers.CharField(allow_blank=True, required=False)
     is_superuser = serializers.BooleanField()
     profile = UserProfileSerializer()
 

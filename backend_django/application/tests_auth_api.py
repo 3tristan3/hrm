@@ -1,5 +1,6 @@
 """认证安全相关接口测试。"""
 from datetime import timedelta
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
@@ -67,6 +68,16 @@ class AuthHardeningApiTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
         response = self.client.get(reverse("auth-me"))
         self.assertEqual(response.status_code, 401)
+
+    def test_me_returns_real_name(self):
+        self.user.first_name = "张三"
+        self.user.save(update_fields=["first_name"])
+        token = Token.objects.create(user=self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+        response = self.client.get(reverse("auth-me"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("real_name"), "张三")
 
     def test_logout_revokes_token(self):
         token = Token.objects.create(user=self.user)
@@ -200,6 +211,20 @@ class OASSOApiTests(APITestCase):
         )
         self.assertEqual(second_exchange.status_code, 400)
         self.assertEqual(second_exchange.json().get("error_code"), "OA_SSO_TICKET_INVALID")
+
+    @override_settings(
+        OA_SSO_ENABLED=True,
+        OA_SSO_ALLOWED_APPIDS=["hrm"],
+    )
+    def test_oa_entry_calls_real_name_sync(self):
+        with patch("application.api_views.auth.sync_oa_user_real_name", return_value=True) as sync_mock:
+            response = self.client.post(
+                reverse("auth-oa-entry"),
+                data={"loginid": self.username, "appid": "hrm"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 302)
+        sync_mock.assert_called_once_with(self.user, loginid=self.username)
 
     @override_settings(
         OA_SSO_ENABLED=True,

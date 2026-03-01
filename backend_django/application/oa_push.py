@@ -114,6 +114,42 @@ def _required_config() -> dict[str, str]:
     }
 
 
+def get_oa_auth_config() -> dict[str, str]:
+    """对外公开 OA 鉴权基础配置，供其他 OA 模块复用。"""
+    config = _required_config()
+    return {
+        "base_url": str(config.get("OA_PUSH_BASE_URL") or "").strip().rstrip("/"),
+        "app_id": str(config.get("OA_PUSH_APP_ID") or "").strip(),
+        "secrit": str(config.get("OA_PUSH_SECRIT") or "").strip(),
+        "spk": str(config.get("OA_PUSH_SPK") or "").strip(),
+        "user_id": str(config.get("OA_PUSH_USER_ID") or "").strip(),
+    }
+
+
+def get_oa_request_timeout_seconds() -> int:
+    """对外公开 OA 请求超时时间。"""
+    return _get_timeout_seconds()
+
+
+def fetch_oa_token_value(force_refresh: bool = False) -> str:
+    """对外公开 token 获取能力，成功返回 token，失败返回空串。"""
+    result = _fetch_token(force_refresh=force_refresh)
+    if not result.success:
+        return ""
+    return str(_TOKEN_CACHE.get("token") or result.request_id or "").strip()
+
+
+def encrypt_oa_text_with_spk(plain_text: str, *, spk: str = "") -> str:
+    """对外公开 OA 公钥加密能力。spk 为空时使用 OA_PUSH_SPK。"""
+    target_spk = str(spk or get_oa_auth_config().get("spk") or "").strip()
+    if not target_spk:
+        return ""
+    try:
+        return _encrypt_text_with_spk(target_spk, plain_text)
+    except Exception:
+        return ""
+
+
 def _missing_required_keys() -> list[str]:
     required = _required_config()
     return [name for name, value in required.items() if not value]

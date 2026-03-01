@@ -19,7 +19,7 @@
       <div class="user-info">
         <div class="avatar">{{ userInitial }}</div>
         <div class="info-text">
-          <div class="username">{{ currentUsername || "管理员" }}</div>
+          <div class="username">{{ userProfile.real_name || currentUsername || "管理员" }}</div>
           <div class="role-badge">{{ userProfile.can_view_all ? "总部" : userProfile.region_name }}</div>
         </div>
         <button class="logout-btn" title="退出" @click="$emit('logout')">

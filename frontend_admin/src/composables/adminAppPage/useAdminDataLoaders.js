@@ -284,6 +284,7 @@ export const useAdminDataLoaders = ({
 
   const loadProfile = async () => {
     const data = await request(`${authBase}/me/`);
+    userProfile.real_name = data?.real_name || "";
     userProfile.can_view_all = data?.profile?.can_view_all || false;
     userProfile.region_name = data?.profile?.region_name || "";
     userProfile.region_id = data?.profile?.region ?? null;
