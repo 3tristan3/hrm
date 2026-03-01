@@ -1,23 +1,29 @@
 """按职责拆分的视图模块。"""
 from .shared import *
+from django.http import HttpResponseRedirect
+from rest_framework import serializers
+
+from ..oa_sso import (
+    build_oa_sso_redirect_url,
+    consume_oa_sso_login_ticket,
+    create_oa_sso_login_ticket,
+    is_oa_sso_appid_allowed,
+    is_oa_sso_enabled,
+    is_oa_sso_ip_allowed,
+    merge_oa_sso_payload,
+    oa_sso_ticket_ttl_seconds,
+    pick_oa_sso_username,
+    resolve_oa_sso_client_ip,
+)
 
 class RegisterView(APIView):
     def post(self, request: Request):
-        serializer = RegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(
-                {"error": "参数校验失败", "details": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        result = serializer.save()
         return Response(
             {
-                "token": result["token"],
-                "username": result["user"].username,
-                "region": result["region"].id,
-                "can_view_all": result["can_view_all"],
+                "error": "注册功能已关闭",
+                "error_code": "REGISTER_DISABLED",
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_403_FORBIDDEN,
         )
 
 class LoginView(APIView):
@@ -65,6 +71,128 @@ class LoginView(APIView):
                 "username": user.username,
                 "region": profile.region_id if profile else None,
                 "can_view_all": profile.can_view_all if profile else False,
+            }
+        )
+
+
+class OALoginExchangeSerializer(serializers.Serializer):
+    ticket = serializers.CharField(max_length=128)
+
+
+class OALoginEntryView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _handle(self, request: Request):
+        if not is_oa_sso_enabled():
+            return Response(
+                {"error": "OA集成登录未启用", "error_code": "OA_SSO_DISABLED"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        payload = merge_oa_sso_payload(request)
+        appid = str(payload.get("appid") or "").strip()
+        if not is_oa_sso_appid_allowed(appid):
+            return Response(
+                {"error": "OA应用标识不在允许范围内", "error_code": "OA_SSO_APPID_FORBIDDEN"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        client_ip = resolve_oa_sso_client_ip(request)
+        if not is_oa_sso_ip_allowed(client_ip):
+            return Response(
+                {"error": "来源IP不在允许范围内", "error_code": "OA_SSO_IP_FORBIDDEN"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        username = normalize_login_username(pick_oa_sso_username(payload))
+        if not username:
+            return Response(
+                {"error": "缺少OA账号参数", "error_code": "OA_SSO_USERNAME_REQUIRED"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        matched_user = User.objects.filter(username__iexact=username, is_active=True).first()
+        if not matched_user:
+            return Response(
+                {"error": "HRM账号不存在或已禁用", "error_code": "OA_SSO_USER_NOT_FOUND"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        ticket = create_oa_sso_login_ticket(
+            user_id=matched_user.id,
+            username=matched_user.username,
+            appid=appid,
+            source_ip=client_ip,
+        )
+        next_url = (
+            str(payload.get("next") or "").strip()
+            or str(payload.get("redirect_uri") or "").strip()
+            or str(payload.get("return_url") or "").strip()
+        )
+        redirect_url = build_oa_sso_redirect_url(next_url, ticket=ticket)
+        response_mode = str(payload.get("mode") or payload.get("response") or "").strip().lower()
+        if response_mode == "json":
+            return Response(
+                {
+                    "ticket": ticket,
+                    "redirect_url": redirect_url,
+                    "expires_in": oa_sso_ticket_ttl_seconds(),
+                    "username": matched_user.username,
+                }
+            )
+        return HttpResponseRedirect(redirect_url)
+
+    def post(self, request: Request):
+        return self._handle(request)
+
+    def get(self, request: Request):
+        return self._handle(request)
+
+
+class OALoginExchangeView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request):
+        if not is_oa_sso_enabled():
+            return Response(
+                {"error": "OA集成登录未启用", "error_code": "OA_SSO_DISABLED"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = OALoginExchangeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ticket_payload = consume_oa_sso_login_ticket(serializer.validated_data["ticket"])
+        if not ticket_payload:
+            return Response(
+                {"error": "OA登录票据无效或已过期", "error_code": "OA_SSO_TICKET_INVALID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_id = int(ticket_payload.get("user_id") or 0)
+        user = User.objects.filter(pk=user_id, is_active=True).first()
+        if not user:
+            return Response(
+                {"error": "HRM账号不存在或已禁用", "error_code": "OA_SSO_USER_NOT_FOUND"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
+        profile = getattr(user, "profile", None)
+        return Response(
+            {
+                "token": token.key,
+                "username": user.username,
+                "region": profile.region_id if profile else None,
+                "can_view_all": profile.can_view_all if profile else False,
+                "login_source": "oa_sso",
             }
         )
 

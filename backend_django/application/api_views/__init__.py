@@ -2,7 +2,7 @@
 
 from .shared import HealthCheckView, AdminResultListPagination, OperationLogCursorPagination, AdminScopedMixin
 from .public import RegionListView, JobListView, JobDetailView, ApplicationCreateView, ApplicationSubmitView, ApplicationTokenAccessMixin, ApplicationAttachmentListCreateView, ApplicationDiscardView
-from .auth import RegisterView, LoginView, MeView, AdminUserListView, AdminUserPasswordView, AdminUserDetailView, ChangePasswordView, LogoutView
+from .auth import RegisterView, LoginView, OALoginEntryView, OALoginExchangeView, MeView, AdminUserListView, AdminUserPasswordView, AdminUserDetailView, ChangePasswordView, LogoutView
 from .admin_regions_jobs import _RegionAdminQuerysetMixin, AdminRegionListView, AdminRegionDetailView, AdminRegionFieldListView, AdminRegionFieldDetailView, AdminJobListView, AdminJobDetailView, AdminJobBatchStatusView
 from .admin_applications import _ApplicationAdminQuerysetMixin, AdminApplicationListView, AdminApplicationDetailView
 from .admin_logs import operation_log_base_queryset, AdminOperationLogListView, AdminOperationLogDetailView, AdminOperationLogMetaView
@@ -23,6 +23,8 @@ __all__ = [
     "ApplicationDiscardView",
     "RegisterView",
     "LoginView",
+    "OALoginEntryView",
+    "OALoginExchangeView",
     "MeView",
     "AdminUserListView",
     "AdminUserPasswordView",

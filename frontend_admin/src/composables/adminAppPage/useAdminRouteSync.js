@@ -13,14 +13,27 @@ export function useAdminRouteSync({
   const resolveFallbackTab = () => visibleTabs.value?.[0]?.key || "jobs";
 
   watch(
-    () => route.name,
-    (name) => {
+    [() => route.name, () => token.value],
+    ([name, hasToken]) => {
       const tabKey = typeof name === "string" ? name : "";
+      if (tabKey === "login") {
+        if (hasToken) {
+          const fallback = resolveFallbackTab();
+          if (fallback && route.name !== fallback) {
+            router.replace({ name: fallback });
+          }
+        }
+        return;
+      }
       if (!isKnownTab(tabKey)) {
+        if (!hasToken) {
+          if (route.name !== "login") router.replace({ name: "login" });
+          return;
+        }
         const fallback = resolveFallbackTab();
-        if (fallback) {
+        if (fallback && route.name !== fallback) {
           if (activeTab.value !== fallback) activeTab.value = fallback;
-          if (route.name !== fallback) router.replace({ name: fallback });
+          router.replace({ name: fallback });
         }
         return;
       }
@@ -54,7 +67,7 @@ export function useAdminRouteSync({
   watch(
     () => activeTab.value,
     (tab) => {
-      if (!tab || route.name === tab) return;
+      if (!tab || route.name === tab || route.name === "login") return;
       if (isKnownTab(tab)) {
         router.replace({ name: tab });
       }

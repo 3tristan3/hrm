@@ -86,7 +86,7 @@ export const useAdminAppPage = () => {
     jobFilters, applicationFilters, interviewFilters, interviewTimeSort, passedFilters, talentFilters, operationLogFilters, operationLogMeta, operationLogsQueried, interviewScheduleForm, interviewResultForm, interviewMeta,
   });
 
-  const { submitAuth, logout } = useAdminSessionActions({
+  const { submitAuth, exchangeOATicket, logout } = useAdminSessionActions({
     authMode,
     authForm,
     authBase,
@@ -212,6 +212,19 @@ export const useAdminAppPage = () => {
 
   onMounted(async () => {
     if (!token.value) {
+      const oaTicket =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("oa_ticket") || ""
+          : "";
+      if (oaTicket) {
+        const ok = await exchangeOATicket(oaTicket);
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("oa_ticket");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+        }
+        if (ok) return;
+      }
       await fetchPublicRegions();
       return;
     }

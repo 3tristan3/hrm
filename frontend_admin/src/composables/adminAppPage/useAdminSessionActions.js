@@ -2,7 +2,6 @@ import { createInterviewMeta } from "../../utils/interviewMeta";
 import { LIST_PAGE_SIZE, resetPageState } from "../../utils/pagination";
 
 export const useAdminSessionActions = ({
-  authMode,
   authForm,
   authBase,
   token,
@@ -54,51 +53,71 @@ export const useAdminSessionActions = ({
   resetOperationLogFilters,
   resetOperationLogMeta,
 }) => {
+  const applyAuthenticatedState = async (payload, usernameFallback = "") => {
+    token.value = payload.token;
+    currentUsername.value = payload.username || usernameFallback || "";
+    localStorage.setItem("admin_token", payload.token);
+    if (currentUsername.value) {
+      localStorage.setItem("admin_username", currentUsername.value);
+    } else {
+      localStorage.removeItem("admin_username");
+    }
+    dataLoaded.regions = false;
+    dataLoaded.jobs = false;
+    dataLoaded.applications = false;
+    dataLoaded.interviews = false;
+    dataLoaded.passed = false;
+    dataLoaded.talent = false;
+    dataLoaded.operationLogs = false;
+    dataLoaded.interviewMeta = false;
+    dataLoaded.users = false;
+    resetPageState(interviewPagination);
+    resetPageState(passedPagination);
+    resetPageState(talentPagination);
+    interviewPagination.pageSize = LIST_PAGE_SIZE;
+    passedPagination.pageSize = LIST_PAGE_SIZE;
+    talentPagination.pageSize = LIST_PAGE_SIZE;
+    resetOperationLogPageState();
+    operationLogs.value = [];
+    selectedPassedIds.value = [];
+    selectedTalentIds.value = [];
+    resetJobFilters();
+    resetPassedFilters();
+    resetTalentFilters();
+    resetOperationLogFilters();
+    resetOperationLogMeta();
+    operationLogPagination.pageSize = LIST_PAGE_SIZE;
+    await loadProfile();
+    await ensureTabData(activeTab.value, true);
+  };
+
   const submitAuth = async () => {
     try {
-      const endpoint = authMode.value === "register" ? "register" : "login";
       const body = { username: authForm.username, password: authForm.password };
-      if (authMode.value === "register") body.region_id = authForm.region_id;
-      const payload = await request(`${authBase}/${endpoint}/`, {
+      const payload = await request(`${authBase}/login/`, {
         method: "POST",
         body: JSON.stringify(body),
       });
-
-      token.value = payload.token;
-      currentUsername.value = authForm.username;
-      localStorage.setItem("admin_token", payload.token);
-      localStorage.setItem("admin_username", authForm.username);
-      dataLoaded.regions = false;
-      dataLoaded.jobs = false;
-      dataLoaded.applications = false;
-      dataLoaded.interviews = false;
-      dataLoaded.passed = false;
-      dataLoaded.talent = false;
-      dataLoaded.operationLogs = false;
-      dataLoaded.interviewMeta = false;
-      dataLoaded.users = false;
-      resetPageState(interviewPagination);
-      resetPageState(passedPagination);
-      resetPageState(talentPagination);
-      interviewPagination.pageSize = LIST_PAGE_SIZE;
-      passedPagination.pageSize = LIST_PAGE_SIZE;
-      talentPagination.pageSize = LIST_PAGE_SIZE;
-      resetOperationLogPageState();
-      operationLogs.value = [];
-      selectedPassedIds.value = [];
-      selectedTalentIds.value = [];
-      resetJobFilters();
-      resetPassedFilters();
-      resetTalentFilters();
-      resetOperationLogFilters();
-      resetOperationLogMeta();
-      operationLogPagination.pageSize = LIST_PAGE_SIZE;
-
+      await applyAuthenticatedState(payload, authForm.username);
       notifySuccess("登录成功");
-      await loadProfile();
-      await ensureTabData(activeTab.value, true);
     } catch (err) {
       notifyError(err);
+    }
+  };
+
+  const exchangeOATicket = async (ticket) => {
+    if (!ticket) return false;
+    try {
+      const payload = await request(`${authBase}/oa/exchange/`, {
+        method: "POST",
+        body: JSON.stringify({ ticket }),
+      });
+      await applyAuthenticatedState(payload, payload?.username || "");
+      notifySuccess("OA登录成功");
+      return true;
+    } catch (err) {
+      notifyError(err);
+      return false;
     }
   };
 
@@ -194,6 +213,7 @@ export const useAdminSessionActions = ({
 
   return {
     submitAuth,
+    exchangeOATicket,
     logout,
   };
 };

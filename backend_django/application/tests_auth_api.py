@@ -1,5 +1,6 @@
 """认证安全相关接口测试。"""
 from datetime import timedelta
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -24,7 +25,7 @@ class AuthHardeningApiTests(APITestCase):
             password=self.password,
         )
 
-    def test_register_requires_strong_password(self):
+    def test_register_is_disabled(self):
         response = self.client.post(
             reverse("auth-register"),
             data={
@@ -34,10 +35,9 @@ class AuthHardeningApiTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 403)
         payload = response.json()
-        self.assertIn("details", payload)
-        self.assertIn("password", payload["details"])
+        self.assertEqual(payload.get("error_code"), "REGISTER_DISABLED")
 
     def test_login_rotates_token(self):
         old_token = Token.objects.create(user=self.user)
@@ -135,3 +135,79 @@ class AuthHardeningApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(throttled_response.status_code, 429)
+
+
+class OASSOApiTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.user_model = get_user_model()
+        self.region = Region.objects.create(name="OA登录测试地区", code="oa-sso-region")
+        self.username = "oa_sso_user"
+        self.password = "StrongPass#123"
+        self.user = self.user_model.objects.create_user(
+            username=self.username,
+            password=self.password,
+        )
+
+    def test_oa_entry_returns_forbidden_when_disabled(self):
+        response = self.client.post(
+            reverse("auth-oa-entry"),
+            data={"loginid": self.username, "appid": "hrm"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.json()
+        self.assertEqual(payload.get("error_code"), "OA_SSO_DISABLED")
+
+    @override_settings(
+        OA_SSO_ENABLED=True,
+        OA_SSO_ALLOWED_APPIDS=["hrm"],
+        OA_SSO_DEFAULT_NEXT_URL="/jobs",
+    )
+    def test_oa_entry_and_exchange_success(self):
+        entry_response = self.client.post(
+            reverse("auth-oa-entry"),
+            data={"loginid": self.username, "appid": "hrm"},
+            format="json",
+        )
+        self.assertEqual(entry_response.status_code, 302)
+        redirect_url = entry_response.get("Location", "")
+        self.assertIn("oa_ticket=", redirect_url)
+        query = parse_qs(urlsplit(redirect_url).query)
+        ticket = str((query.get("oa_ticket") or [""])[0])
+        self.assertTrue(ticket)
+
+        exchange_response = self.client.post(
+            reverse("auth-oa-exchange"),
+            data={"ticket": ticket},
+            format="json",
+        )
+        self.assertEqual(exchange_response.status_code, 200)
+        payload = exchange_response.json()
+        self.assertIn("token", payload)
+        self.assertEqual(payload.get("username"), self.username)
+        self.assertEqual(payload.get("login_source"), "oa_sso")
+
+        second_exchange = self.client.post(
+            reverse("auth-oa-exchange"),
+            data={"ticket": ticket},
+            format="json",
+        )
+        self.assertEqual(second_exchange.status_code, 400)
+        self.assertEqual(second_exchange.json().get("error_code"), "OA_SSO_TICKET_INVALID")
+
+    @override_settings(
+        OA_SSO_ENABLED=True,
+        OA_SSO_ALLOWED_APPIDS=["hrm"],
+        OA_SSO_ALLOWED_IPS=["10.10.10.10"],
+    )
+    def test_oa_entry_rejects_ip_not_allowed(self):
+        response = self.client.post(
+            reverse("auth-oa-entry"),
+            data={"loginid": self.username, "appid": "hrm"},
+            format="json",
+            REMOTE_ADDR="127.0.0.1",
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.json()
+        self.assertEqual(payload.get("error_code"), "OA_SSO_IP_FORBIDDEN")
