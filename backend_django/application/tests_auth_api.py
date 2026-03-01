@@ -211,3 +211,21 @@ class OASSOApiTests(APITestCase):
         self.assertEqual(response.status_code, 403)
         payload = response.json()
         self.assertEqual(payload.get("error_code"), "OA_SSO_IP_FORBIDDEN")
+
+    @override_settings(
+        OA_SSO_ENABLED=True,
+        OA_SSO_ALLOWED_APPIDS=["hrm"],
+        OA_SSO_ALLOWED_IPS=["10.10.10.10"],
+    )
+    def test_oa_entry_uses_x_real_ip_over_spoofed_xff(self):
+        response = self.client.post(
+            reverse("auth-oa-entry"),
+            data={"loginid": self.username, "appid": "hrm"},
+            format="json",
+            REMOTE_ADDR="8.8.8.8",
+            HTTP_X_REAL_IP="8.8.8.8",
+            HTTP_X_FORWARDED_FOR="10.10.10.10,8.8.8.8",
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.json()
+        self.assertEqual(payload.get("error_code"), "OA_SSO_IP_FORBIDDEN")

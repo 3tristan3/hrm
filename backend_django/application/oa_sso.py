@@ -6,10 +6,12 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
+from django.core import signing
 from django.core.cache import cache
 
 
-OA_SSO_TICKET_CACHE_PREFIX = "oa_sso:ticket:"
+OA_SSO_TICKET_SIGN_SALT = "application.oa_sso.ticket"
+OA_SSO_USED_TICKET_CACHE_PREFIX = "oa_sso:used:"
 
 
 def _normalize_text(value: Any) -> str:
@@ -43,12 +45,15 @@ def is_oa_sso_ip_allowed(client_ip: str) -> bool:
 
 
 def resolve_oa_sso_client_ip(request) -> str:
-    x_forwarded_for = _normalize_text(request.META.get("HTTP_X_FORWARDED_FOR"))
-    if x_forwarded_for:
-        return _normalize_text(x_forwarded_for.split(",")[0])
     x_real_ip = _normalize_text(request.META.get("HTTP_X_REAL_IP"))
     if x_real_ip:
         return x_real_ip
+    x_forwarded_for = _normalize_text(request.META.get("HTTP_X_FORWARDED_FOR"))
+    if x_forwarded_for:
+        parts = [item.strip() for item in x_forwarded_for.split(",") if item.strip()]
+        if parts:
+            # 取最后一跳，规避客户端伪造首位 X-Forwarded-For 的场景。
+            return _normalize_text(parts[-1])
     return _normalize_text(request.META.get("REMOTE_ADDR"))
 
 
@@ -74,30 +79,44 @@ def pick_oa_sso_username(payload: dict[str, Any]) -> str:
 
 
 def create_oa_sso_login_ticket(*, user_id: int, username: str, appid: str = "", source_ip: str = "") -> str:
-    ticket = secrets.token_urlsafe(36)
-    cache.set(
-        f"{OA_SSO_TICKET_CACHE_PREFIX}{ticket}",
-        {
-            "user_id": int(user_id),
-            "username": _normalize_text(username),
-            "appid": _normalize_text(appid),
-            "source_ip": _normalize_text(source_ip),
-        },
-        timeout=oa_sso_ticket_ttl_seconds(),
+    payload = {
+        "jti": secrets.token_urlsafe(12),
+        "user_id": int(user_id),
+        "username": _normalize_text(username),
+        "appid": _normalize_text(appid),
+        "source_ip": _normalize_text(source_ip),
+    }
+    return signing.dumps(
+        payload,
+        salt=OA_SSO_TICKET_SIGN_SALT,
+        compress=True,
     )
-    return ticket
 
 
 def consume_oa_sso_login_ticket(ticket: str) -> dict[str, Any] | None:
     normalized_ticket = _normalize_text(ticket)
     if not normalized_ticket:
         return None
-    cache_key = f"{OA_SSO_TICKET_CACHE_PREFIX}{normalized_ticket}"
-    payload = cache.get(cache_key)
-    cache.delete(cache_key)
-    if isinstance(payload, dict):
-        return payload
-    return None
+    try:
+        payload = signing.loads(
+            normalized_ticket,
+            salt=OA_SSO_TICKET_SIGN_SALT,
+            max_age=oa_sso_ticket_ttl_seconds(),
+        )
+    except signing.BadSignature:
+        return None
+    except signing.SignatureExpired:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    jti = _normalize_text(payload.get("jti"))
+    if not jti:
+        return None
+    used_key = f"{OA_SSO_USED_TICKET_CACHE_PREFIX}{jti}"
+    if cache.get(used_key):
+        return None
+    cache.set(used_key, "1", timeout=oa_sso_ticket_ttl_seconds())
+    return payload
 
 
 def _sanitize_relative_url(raw_url: str) -> str:

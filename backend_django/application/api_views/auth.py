@@ -76,7 +76,8 @@ class LoginView(APIView):
 
 
 class OALoginExchangeSerializer(serializers.Serializer):
-    ticket = serializers.CharField(max_length=128)
+    # 签名票据长度可能超过 128（含签名与压缩数据），这里放宽上限避免误拦截。
+    ticket = serializers.CharField(max_length=1024)
 
 
 class OALoginEntryView(APIView):
