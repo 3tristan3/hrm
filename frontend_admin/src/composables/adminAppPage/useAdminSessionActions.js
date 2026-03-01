@@ -1,7 +1,8 @@
-import { createInterviewMeta } from "../../utils/interviewMeta";
+﻿import { createInterviewMeta } from "../../utils/interviewMeta";
 import { LIST_PAGE_SIZE, resetPageState } from "../../utils/pagination";
 
 export const useAdminSessionActions = ({
+  authMode,
   authForm,
   authBase,
   token,
@@ -93,13 +94,17 @@ export const useAdminSessionActions = ({
 
   const submitAuth = async () => {
     try {
+      const endpoint = authMode.value === "register" ? "register" : "login";
       const body = { username: authForm.username, password: authForm.password };
-      const payload = await request(`${authBase}/login/`, {
+      if (authMode.value === "register") {
+        body.region_id = authForm.region_id;
+      }
+      const payload = await request(`${authBase}/${endpoint}/`, {
         method: "POST",
         body: JSON.stringify(body),
       });
       await applyAuthenticatedState(payload, authForm.username);
-      notifySuccess("登录成功");
+      notifySuccess(authMode.value === "register" ? "注册并登录成功" : "登录成功");
     } catch (err) {
       notifyError(err);
     }

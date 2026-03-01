@@ -25,19 +25,24 @@ class AuthHardeningApiTests(APITestCase):
             password=self.password,
         )
 
-    def test_register_is_disabled(self):
+    def test_register_creates_user_and_returns_token(self):
+        username = "new_user"
         response = self.client.post(
             reverse("auth-register"),
             data={
-                "username": "new_user",
-                "password": "12345678",
+                "username": username,
+                "password": "StrongPass#456",
                 "region_id": self.region.id,
             },
             format="json",
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 201)
         payload = response.json()
-        self.assertEqual(payload.get("error_code"), "REGISTER_DISABLED")
+        self.assertIn("token", payload)
+        self.assertEqual(payload.get("username"), username)
+        self.assertEqual(payload.get("region"), self.region.id)
+        self.assertFalse(payload.get("can_view_all"))
+        self.assertTrue(self.user_model.objects.filter(username=username).exists())
 
     def test_login_rotates_token(self):
         old_token = Token.objects.create(user=self.user)

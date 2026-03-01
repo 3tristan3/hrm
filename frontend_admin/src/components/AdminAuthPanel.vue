@@ -14,6 +14,13 @@
         >
           登录账号
         </div>
+        <div
+          class="tab-item"
+          :class="{ active: authMode === 'register' }"
+          @click="$emit('update:authMode', 'register')"
+        >
+          注册新号
+        </div>
       </div>
 
       <form class="auth-form" @submit.prevent="$emit('submit')">
@@ -23,8 +30,16 @@
         <div class="form-item">
           <input v-model="authForm.password" type="password" placeholder="请输入密码" required />
         </div>
+        <div v-if="authMode === 'register'" class="form-item">
+          <select v-model.number="authForm.region_id" required>
+            <option value="" disabled>选择所属地区</option>
+            <option v-for="item in publicRegions" :key="item.id" :value="item.id">
+              {{ item.name }}
+            </option>
+          </select>
+        </div>
         <button type="submit" class="btn btn-primary btn-block">
-          登 录
+          {{ authMode === "login" ? "登 录" : "注 册 并 登 录" }}
         </button>
       </form>
     </div>

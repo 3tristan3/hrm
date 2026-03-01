@@ -18,12 +18,21 @@ from ..oa_sso import (
 
 class RegisterView(APIView):
     def post(self, request: Request):
+        serializer = RegisterSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "参数校验失败", "details": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = serializer.save()
         return Response(
             {
-                "error": "注册功能已关闭",
-                "error_code": "REGISTER_DISABLED",
+                "token": result["token"],
+                "username": result["user"].username,
+                "region": result["region"].id,
+                "can_view_all": result["can_view_all"],
             },
-            status=status.HTTP_403_FORBIDDEN,
+            status=status.HTTP_201_CREATED,
         )
 
 class LoginView(APIView):
