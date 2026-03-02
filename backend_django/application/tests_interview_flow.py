@@ -7,6 +7,7 @@ from django.utils import timezone
 from .interview_flow import (
     InterviewFlowError,
     cancel_schedule,
+    normalize_interviewer_decisions,
     record_result,
     schedule_interview,
 )
@@ -76,7 +77,7 @@ class InterviewFlowServiceTests(TestCase):
         record_result(
             candidate,
             result=InterviewCandidate.RESULT_NEXT_ROUND,
-            score=86,
+            interviewer_decisions=[{"interviewer": "面试官A", "decision": "pass"}],
             result_note="一面可进入二面",
         )
         candidate.refresh_from_db()
@@ -100,7 +101,7 @@ class InterviewFlowServiceTests(TestCase):
         record_result(
             candidate,
             result=InterviewCandidate.RESULT_PASS,
-            score=92,
+            interviewer_decisions=[{"interviewer": "面试官A", "decision": "pass"}],
             result_note="综合能力优秀",
         )
         candidate.refresh_from_db()
@@ -112,10 +113,13 @@ class InterviewFlowServiceTests(TestCase):
         self.assertIsNone(candidate.interview_at)
 
         round_record = InterviewRoundRecord.objects.get(candidate=candidate, round_no=1)
-        self.assertEqual(round_record.score, 92)
+        self.assertIsNone(round_record.score)
         self.assertEqual(round_record.result, InterviewCandidate.RESULT_PASS)
         self.assertEqual(round_record.interviewer, "面试官A")
-        self.assertEqual(round_record.interviewer_scores, [{"interviewer": "面试官A", "score": 92}])
+        self.assertEqual(
+            round_record.interviewer_scores,
+            [{"interviewer": "面试官A", "decision": "pass"}],
+        )
 
     def test_record_pass_result_resets_offer_status_to_pending(self):
         candidate = self._create_candidate(
@@ -129,7 +133,7 @@ class InterviewFlowServiceTests(TestCase):
         record_result(
             candidate,
             result=InterviewCandidate.RESULT_PASS,
-            score=90,
+            interviewer_decisions=[{"interviewer": "面试官A", "decision": "pass"}],
             result_note="通过后进入待发offer",
         )
         candidate.refresh_from_db()
@@ -146,7 +150,7 @@ class InterviewFlowServiceTests(TestCase):
         record_result(
             candidate,
             result=InterviewCandidate.RESULT_PENDING,
-            score=75,
+            interviewer_decisions=[{"interviewer": "面试官A", "decision": "pass"}],
             result_note="需要补充资料后再定",
         )
         candidate.refresh_from_db()
@@ -156,7 +160,7 @@ class InterviewFlowServiceTests(TestCase):
         self.assertIsNone(candidate.interview_at)
         self.assertEqual(candidate.interviewer, "")
 
-    def test_record_result_with_per_interviewer_scores(self):
+    def test_record_result_keeps_round_interviewers_and_clears_score_fields(self):
         candidate = self._create_candidate()
         interview_at = timezone.now() + timedelta(hours=2)
         schedule_interview(
@@ -168,28 +172,28 @@ class InterviewFlowServiceTests(TestCase):
         record_result(
             candidate,
             result=InterviewCandidate.RESULT_PASS,
-            interviewer_scores=[
-                {"interviewer": "面试官A", "score": 88},
-                {"interviewer": "面试官B", "score": 92},
+            interviewer_decisions=[
+                {"interviewer": "面试官A", "decision": "pass"},
+                {"interviewer": "面试官B", "decision": "fail"},
             ],
             result_note="双面试官均通过",
         )
         candidate.refresh_from_db()
 
         self.assertEqual(candidate.result, InterviewCandidate.RESULT_PASS)
-        self.assertEqual(candidate.score, 90)
+        self.assertIsNone(candidate.score)
         self.assertEqual(
             candidate.interviewer_scores,
             [
-                {"interviewer": "面试官A", "score": 88},
-                {"interviewer": "面试官B", "score": 92},
+                {"interviewer": "面试官A", "decision": "pass"},
+                {"interviewer": "面试官B", "decision": "fail"},
             ],
         )
 
         round_record = InterviewRoundRecord.objects.get(candidate=candidate, round_no=1)
         self.assertEqual(round_record.interviewers, ["面试官A", "面试官B"])
         self.assertEqual(round_record.interviewer, "面试官A、面试官B")
-        self.assertEqual(round_record.score, 90)
+        self.assertIsNone(round_record.score)
 
     def test_record_next_round_on_round_three_should_fail(self):
         candidate = self._create_candidate(
@@ -200,9 +204,29 @@ class InterviewFlowServiceTests(TestCase):
         )
 
         with self.assertRaises(InterviewFlowError) as ctx:
-            record_result(candidate, result=InterviewCandidate.RESULT_NEXT_ROUND, score=80)
+            record_result(
+                candidate,
+                result=InterviewCandidate.RESULT_NEXT_ROUND,
+                interviewer_decisions=[{"interviewer": "面试官C", "decision": "pass"}],
+            )
 
         self.assertEqual(ctx.exception.code, "INTERVIEW_ROUND_LIMIT_REACHED")
+
+    def test_normalize_interviewer_decisions(self):
+        self.assertEqual(
+            normalize_interviewer_decisions(
+                [
+                    {"interviewer": "A", "decision": "pass"},
+                    {"interviewer": "A", "decision": "fail"},
+                    {"interviewer": "B", "decision": "fail"},
+                    {"interviewer": " ", "decision": "pass"},
+                ]
+            ),
+            [
+                {"interviewer": "A", "decision": "pass"},
+                {"interviewer": "B", "decision": "fail"},
+            ],
+        )
 
     def test_cancel_unscheduled_should_fail(self):
         candidate = self._create_candidate()

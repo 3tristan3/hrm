@@ -86,12 +86,13 @@ export function createAdminAppState() {
   });
   const interviewResultForm = reactive({
     id: null,
+    application_id: null,
     name: "",
     interview_round: 1,
     status: "",
     result: defaultInterviewMeta.result_next_round,
-    score: null,
-    interviewer_scores: [{ interviewer: "", score: null }],
+    interviewer_decisions: [{ interviewer: "", decision: "pass" }],
+    attachments: [],
     result_note: "",
   });
 

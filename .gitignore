@@ -48,3 +48,4 @@ frontend_admin/.env.local
 .DS_Store
 Thumbs.db
 start_all.ps1
+/docs

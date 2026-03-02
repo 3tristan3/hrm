@@ -29,56 +29,56 @@ const toScheduleInterviewerRows = (item = {}) => {
   return [""];
 };
 
-const toResultScoreRows = (item = {}) => {
+const toResultDecisionRows = (item = {}) => {
   const rows = Array.isArray(item.interviewer_scores)
     ? item.interviewer_scores
         .map((row) => ({
           interviewer: String(row?.interviewer || "").trim(),
-          score: row?.score ?? null,
+          decision: String(row?.decision || "").trim().toLowerCase(),
         }))
-        .filter((row) => row.interviewer)
+        .filter(
+          (row) =>
+            row.interviewer &&
+            (row.decision === "pass" || row.decision === "fail")
+        )
     : [];
   if (rows.length) return rows;
+
   const names = normalizeInterviewerNames(item.interviewers || []);
-  if (names.length) {
-    if (names.length === 1 && item.score !== null && item.score !== undefined) {
-      return [{ interviewer: names[0], score: item.score }];
-    }
-    return names.map((name) => ({ interviewer: name, score: null }));
-  }
+  if (names.length) return names.map((name) => ({ interviewer: name, decision: "pass" }));
+
   const legacyNames = splitLegacyInterviewer(item.interviewer);
-  if (legacyNames.length) {
-    if (legacyNames.length === 1 && item.score !== null && item.score !== undefined) {
-      return [{ interviewer: legacyNames[0], score: item.score }];
-    }
-    return legacyNames.map((name) => ({ interviewer: name, score: null }));
-  }
-  return [{ interviewer: "", score: null }];
+  if (legacyNames.length) return legacyNames.map((name) => ({ interviewer: name, decision: "pass" }));
+
+  return [{ interviewer: "", decision: "pass" }];
 };
 
-const normalizeResultScoreRows = (rows = []) => {
+const normalizeInterviewerDecisionRows = (rows = []) => {
   const normalized = [];
   const seen = new Set();
   for (const row of rows || []) {
     const interviewer = String(row?.interviewer || "").trim();
+    const decision = String(row?.decision || "").trim().toLowerCase();
     const hasName = Boolean(interviewer);
-    const hasScore = !(row?.score === null || row?.score === undefined || row?.score === "");
-    if (!hasName && !hasScore) continue;
-    if (!hasName || !hasScore) {
-      return { ok: false, message: "请完整填写面试官与评分" };
+    const hasDecision = Boolean(decision);
+    if (!hasName && !hasDecision) continue;
+    if (!hasName || !hasDecision) {
+      return { ok: false, message: "请完整填写面试官与结论" };
     }
-    const score = Number(row.score);
-    if (!Number.isInteger(score) || score < 0 || score > 100) {
-      return { ok: false, message: "评分需为 0-100 的整数" };
+    if (decision !== "pass" && decision !== "fail") {
+      return { ok: false, message: "面试官结论必须是通过或不通过" };
     }
     if (seen.has(interviewer)) {
       return { ok: false, message: "面试官姓名不能重复" };
     }
     seen.add(interviewer);
-    normalized.push({ interviewer, score });
+    normalized.push({ interviewer, decision });
   }
   if (!normalized.length) {
-    return { ok: false, message: "请至少填写一位面试官评分" };
+    return { ok: false, message: "请至少填写一位面试官结论" };
+  }
+  if (normalized.length > 10) {
+    return { ok: false, message: "单场面试最多记录 10 位面试官结论" };
   }
   return { ok: true, rows: normalized };
 };
@@ -145,16 +145,17 @@ export const useAdminInterviewActions = ({
     resetInterviewScheduleForm();
   };
 
-  // 打开结果录入弹窗，带入当前轮次与历史评分
+  // 打开结果录入弹窗，带入当前轮次
   const openInterviewResult = (item) => {
     Object.assign(interviewResultForm, {
       id: item.id,
+      application_id: item.application_id || null,
       name: item.name || "",
       interview_round: item.interview_round || 1,
       status: item.status || "",
-      result: interviewMeta.result_next_round,
-      score: item.score ?? null,
-      interviewer_scores: toResultScoreRows(item),
+      result: item.result || interviewMeta.result_next_round,
+      interviewer_decisions: toResultDecisionRows(item),
+      attachments: [],
       result_note: item.result_note || "",
     });
     showInterviewResultForm.value = true;
@@ -253,22 +254,39 @@ export const useAdminInterviewActions = ({
     if (done) closeInterviewSchedule();
   };
 
-  // 保存结果：支持进入下一轮/通过/淘汰，并按需刷新通过列表与人才库
+  // 保存结果：保留原始面试结果选择，并记录每位面试官结论与可选附件
   const saveInterviewResult = async () => {
     if (!interviewResultForm.id) return;
-    const scoreRowsResult = normalizeResultScoreRows(interviewResultForm.interviewer_scores);
-    if (!scoreRowsResult.ok) {
-      toastRef.value?.show(scoreRowsResult.message, "error");
+    if (!String(interviewResultForm.result || "").trim()) {
+      toastRef.value?.show("请选择面试结果", "error");
       return;
     }
-    const interviewerScores = scoreRowsResult.rows;
+    const decisionRowsResult = normalizeInterviewerDecisionRows(
+      interviewResultForm.interviewer_decisions
+    );
+    if (!decisionRowsResult.ok) {
+      toastRef.value?.show(decisionRowsResult.message, "error");
+      return;
+    }
+    const interviewerDecisions = decisionRowsResult.rows;
     resultSaving.value = true;
     try {
+      const selectedFiles = Array.isArray(interviewResultForm.attachments)
+        ? interviewResultForm.attachments.filter(Boolean)
+        : [];
+      if (selectedFiles.length) {
+        if (!interviewResultForm.application_id) {
+          throw new Error("未找到应聘记录，无法上传附件");
+        }
+        await interviewApi.uploadInterviewExtraAttachments(
+          interviewResultForm.application_id,
+          selectedFiles
+        );
+      }
       const payload = {
         result: interviewResultForm.result,
+        interviewer_decisions: interviewerDecisions,
         result_note: interviewResultForm.result_note,
-        interviewer_scores: interviewerScores,
-        score: interviewerScores.length === 1 ? interviewerScores[0].score : null,
       };
       await interviewApi.saveResult(interviewResultForm.id, payload);
       const shouldRefreshPassed =

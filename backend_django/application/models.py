@@ -155,6 +155,7 @@ class ApplicationAttachment(models.Model):
         ("criminal", "无犯罪证明"),
         ("credit", "个人信用报告"),
         ("other", "其他相关附件"),
+        ("interview_extra", "面试补充材料"),
     ]
 
     application = models.ForeignKey(

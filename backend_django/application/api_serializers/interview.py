@@ -309,36 +309,32 @@ class InterviewCandidateResultSerializer(serializers.Serializer):
     """面试结果录入入参。"""
 
     result = serializers.ChoiceField(choices=InterviewCandidate.RESULT_CHOICES)
-    score = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=100)
-    interviewer_scores = serializers.ListField(
+    interviewer_decisions = serializers.ListField(
         child=serializers.DictField(),
-        required=False,
-        allow_empty=True,
+        allow_empty=False,
     )
     result_note = serializers.CharField(required=False, allow_blank=True)
 
-    def validate_interviewer_scores(self, value):
+    def validate_interviewer_decisions(self, value):
         rows = []
         seen = set()
         for item in value or []:
             if not isinstance(item, dict):
-                raise serializers.ValidationError("面试官评分项格式不正确")
+                raise serializers.ValidationError("面试官结论格式不正确")
             interviewer = str(item.get("interviewer") or "").strip()
-            score = item.get("score", None)
+            decision = str(item.get("decision") or "").strip().lower()
             if not interviewer:
                 raise serializers.ValidationError("面试官姓名不能为空")
             if interviewer in seen:
                 raise serializers.ValidationError("面试官姓名不能重复")
-            try:
-                score_value = int(score)
-            except (TypeError, ValueError):
-                raise serializers.ValidationError("面试官评分必须是 0-100 的整数")
-            if score_value < 0 or score_value > 100:
-                raise serializers.ValidationError("面试官评分必须是 0-100 的整数")
+            if decision not in {"pass", "fail"}:
+                raise serializers.ValidationError("面试官结论必须是通过或不通过")
             seen.add(interviewer)
-            rows.append({"interviewer": interviewer, "score": score_value})
+            rows.append({"interviewer": interviewer, "decision": decision})
+        if not rows:
+            raise serializers.ValidationError("请至少填写一位面试官结论")
         if len(rows) > 10:
-            raise serializers.ValidationError("单场面试最多记录 10 位面试官评分")
+            raise serializers.ValidationError("单场面试最多记录 10 位面试官结论")
         return rows
 
 

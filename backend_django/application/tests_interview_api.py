@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -29,6 +30,7 @@ class InterviewMetaApiTests(APITestCase):
         payload = response.json()
         self.assertIn("status_scheduled", payload)
         self.assertIn("result_next_round", payload)
+        self.assertIn("decision_choices", payload)
         self.assertIn("final_results", payload)
         self.assertIn("max_round", payload)
         self.assertGreaterEqual(int(payload["max_round"]), 1)
@@ -48,13 +50,48 @@ class InterviewMetaApiTests(APITestCase):
         url = reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id})
         response = self.client.post(
             url,
-            data={"result": InterviewCandidate.RESULT_PASS, "score": 90},
+            data={
+                "result": InterviewCandidate.RESULT_PASS,
+                "interviewer_decisions": [
+                    {"interviewer": "面试官A", "decision": "pass"},
+                ]
+            },
             format="json",
         )
 
         self.assertEqual(response.status_code, 400)
         payload = response.json()
         self.assertEqual(payload.get("error_code"), "INTERVIEW_NOT_SCHEDULED_FOR_RESULT")
+
+    def test_result_requires_at_least_one_interviewer_decision(self):
+        candidate = self._create_candidate("空结论候选人", "13800001110")
+        interview_at = timezone.now() + timedelta(hours=2)
+        self.assertEqual(
+            self.client.post(
+                reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id}),
+                data={
+                    "interview_at": interview_at.isoformat(),
+                    "interviewers": ["面试官A"],
+                    "interview_location": "总部A座301",
+                },
+                format="json",
+            ).status_code,
+            200,
+        )
+
+        response = self.client.post(
+            reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id}),
+            data={
+                "result": InterviewCandidate.RESULT_PASS,
+                "interviewer_decisions": [],
+                "result_note": "未填写结论",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn("details", payload)
 
     @mock.patch("application.api_views.interviews.actions_schedule.dispatch_interview_schedule_sms")
     def test_schedule_with_send_sms_calls_dispatch_and_returns_sms_payload(self, mocked_dispatch):
@@ -111,7 +148,7 @@ class InterviewMetaApiTests(APITestCase):
         self.assertEqual(updated.interviewer, "面试官A、面试官B")
         self.assertEqual(updated.sms_status, InterviewCandidate.SMS_STATUS_SUCCESS)
 
-    def test_save_result_supports_per_interviewer_scores(self):
+    def test_save_result_keep_next_round_when_selected(self):
         candidate = self._create_candidate("结果候选人", "13800001121")
         interview_at = timezone.now() + timedelta(hours=2)
         schedule_url = reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id})
@@ -130,10 +167,10 @@ class InterviewMetaApiTests(APITestCase):
         response = self.client.post(
             result_url,
             data={
-                "result": InterviewCandidate.RESULT_PASS,
-                "interviewer_scores": [
-                    {"interviewer": "面试官A", "score": 90},
-                    {"interviewer": "面试官B", "score": 80},
+                "result": InterviewCandidate.RESULT_NEXT_ROUND,
+                "interviewer_decisions": [
+                    {"interviewer": "面试官A", "decision": "pass"},
+                    {"interviewer": "面试官B", "decision": "pass"},
                 ],
                 "result_note": "综合通过",
             },
@@ -144,14 +181,186 @@ class InterviewMetaApiTests(APITestCase):
         self.assertEqual(payload.get("message"), "面试结果已保存")
 
         updated = InterviewCandidate.objects.get(id=candidate.id)
-        self.assertEqual(updated.score, 85)
+        self.assertEqual(updated.result, InterviewCandidate.RESULT_NEXT_ROUND)
+        self.assertEqual(updated.status, InterviewCandidate.STATUS_PENDING)
+        self.assertIsNone(updated.score)
         self.assertEqual(
             updated.interviewer_scores,
             [
-                {"interviewer": "面试官A", "score": 90},
-                {"interviewer": "面试官B", "score": 80},
+                {"interviewer": "面试官A", "decision": "pass"},
+                {"interviewer": "面试官B", "decision": "pass"},
             ],
         )
+
+    def test_save_result_maps_pass_to_final_pass_on_last_round(self):
+        candidate = self._create_candidate(
+            "三轮候选人",
+            "13800001122",
+            interview_round=3,
+            status=InterviewCandidate.STATUS_SCHEDULED,
+            interview_at=timezone.now() + timedelta(hours=2),
+            interviewers=["面试官A"],
+            interviewer="面试官A",
+            interview_location="总部A座301",
+        )
+
+        response = self.client.post(
+            reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id}),
+            data={
+                "result": InterviewCandidate.RESULT_PASS,
+                "interviewer_decisions": [
+                    {"interviewer": "面试官A", "decision": "pass"},
+                    {"interviewer": "面试官B", "decision": "pass"},
+                ],
+                "result_note": "第三轮通过",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.result, InterviewCandidate.RESULT_PASS)
+        self.assertEqual(candidate.status, InterviewCandidate.STATUS_COMPLETED)
+
+    def test_save_result_maps_fail_to_reject(self):
+        candidate = self._create_candidate("不通过候选人", "13800001123")
+        interview_at = timezone.now() + timedelta(hours=2)
+        schedule_url = reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id})
+        self.assertEqual(
+            self.client.post(
+                schedule_url,
+                data={
+                    "interview_at": interview_at.isoformat(),
+                    "interviewers": ["面试官A"],
+                    "interview_location": "总部A座301",
+                },
+                format="json",
+            ).status_code,
+            200,
+        )
+
+        response = self.client.post(
+            reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id}),
+            data={
+                "result": InterviewCandidate.RESULT_REJECT,
+                "interviewer_decisions": [
+                    {"interviewer": "面试官A", "decision": "pass"},
+                    {"interviewer": "面试官B", "decision": "fail"},
+                ],
+                "result_note": "不符合岗位要求",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.result, InterviewCandidate.RESULT_REJECT)
+        self.assertEqual(candidate.status, InterviewCandidate.STATUS_COMPLETED)
+
+    def test_save_result_honors_selected_result_even_if_votes_conflict(self):
+        candidate = self._create_candidate("冲突结论候选人", "13800001125")
+        interview_at = timezone.now() + timedelta(hours=2)
+        self.assertEqual(
+            self.client.post(
+                reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id}),
+                data={
+                    "interview_at": interview_at.isoformat(),
+                    "interviewers": ["面试官A", "面试官B"],
+                    "interview_location": "总部A座301",
+                },
+                format="json",
+            ).status_code,
+            200,
+        )
+
+        response = self.client.post(
+            reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id}),
+            data={
+                "result": InterviewCandidate.RESULT_NEXT_ROUND,
+                "interviewer_decisions": [
+                    {"interviewer": "面试官A", "decision": "fail"},
+                    {"interviewer": "面试官B", "decision": "fail"},
+                ],
+                "result_note": "保留原流程手工判定",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.result, InterviewCandidate.RESULT_NEXT_ROUND)
+        self.assertEqual(candidate.status, InterviewCandidate.STATUS_PENDING)
+
+    def test_admin_can_upload_multiple_interview_extra_attachments(self):
+        candidate = self._create_candidate("附件候选人", "13800001124")
+        url = reverse("application-attachments", kwargs={"pk": candidate.application_id})
+        file_one = SimpleUploadedFile("cert-a.txt", b"cert-a", content_type="text/plain")
+        file_two = SimpleUploadedFile("cert-b.txt", b"cert-b", content_type="text/plain")
+
+        response = self.client.post(
+            url,
+            data={
+                "category": "interview_extra",
+                "file": [file_one, file_two],
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(len(payload), 2)
+        self.assertTrue(all(item.get("category") == "interview_extra" for item in payload))
+
+    def test_application_detail_contains_latest_interview_result_snapshot(self):
+        candidate = self._create_candidate("详情候选人", "13800001126")
+        interview_at = timezone.now() + timedelta(hours=2)
+        self.assertEqual(
+            self.client.post(
+                reverse("admin-interview-candidate-schedule", kwargs={"pk": candidate.id}),
+                data={
+                    "interview_at": interview_at.isoformat(),
+                    "interviewers": ["面试官A", "面试官B"],
+                    "interview_location": "总部A座301",
+                },
+                format="json",
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("admin-interview-candidate-result", kwargs={"pk": candidate.id}),
+                data={
+                    "result": InterviewCandidate.RESULT_NEXT_ROUND,
+                    "interviewer_decisions": [
+                        {"interviewer": "面试官A", "decision": "pass"},
+                        {"interviewer": "面试官B", "decision": "fail"},
+                    ],
+                    "result_note": "综合评估后进入下一轮",
+                },
+                format="json",
+            ).status_code,
+            200,
+        )
+
+        response = self.client.get(
+            reverse("admin-application-detail", kwargs={"pk": candidate.application_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        snapshot = payload.get("latest_interview_result")
+        self.assertIsNotNone(snapshot)
+        self.assertEqual(snapshot.get("round"), 1)
+        self.assertEqual(snapshot.get("result"), InterviewCandidate.RESULT_NEXT_ROUND)
+        self.assertEqual(snapshot.get("interviewers"), ["面试官A", "面试官B"])
+        self.assertEqual(
+            snapshot.get("interviewer_decisions"),
+            [
+                {"interviewer": "面试官A", "decision": "pass"},
+                {"interviewer": "面试官B", "decision": "fail"},
+            ],
+        )
+        self.assertEqual(snapshot.get("result_note"), "综合评估后进入下一轮")
+        self.assertIsNotNone(snapshot.get("result_at"))
 
     @mock.patch("application.api_views.interviews.actions_sms.dispatch_interview_schedule_sms")
     def test_resend_sms_endpoint_records_failed_log_result(self, mocked_dispatch):

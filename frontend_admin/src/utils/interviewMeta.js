@@ -18,6 +18,10 @@ export const defaultInterviewMeta = Object.freeze({
     { value: "淘汰", label: "淘汰" },
     { value: "待定", label: "待定" },
   ],
+  decision_choices: [
+    { value: "pass", label: "通过" },
+    { value: "fail", label: "不通过" },
+  ],
   final_results: ["通过", "淘汰"],
   max_round: 3,
 });
@@ -35,6 +39,10 @@ export const createInterviewMeta = (payload = {}) => {
       Array.isArray(merged.result_choices) && merged.result_choices.length
         ? merged.result_choices
         : defaultInterviewMeta.result_choices,
+    decision_choices:
+      Array.isArray(merged.decision_choices) && merged.decision_choices.length
+        ? merged.decision_choices
+        : defaultInterviewMeta.decision_choices,
     final_results:
       Array.isArray(merged.final_results) && merged.final_results.length
         ? merged.final_results

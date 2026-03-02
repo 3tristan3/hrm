@@ -78,6 +78,10 @@ class AdminInterviewMetaView(AdminScopedMixin, APIView):
                     {"value": value, "label": label}
                     for value, label in InterviewCandidate.RESULT_CHOICES
                 ],
+                "decision_choices": [
+                    {"value": value, "label": label}
+                    for value, label in DECISION_CHOICES
+                ],
                 "final_results": list(FINAL_RESULTS),
                 "max_round": MAX_INTERVIEW_ROUND,
             }

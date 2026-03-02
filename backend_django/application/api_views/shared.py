@@ -27,6 +27,7 @@ from ..auth_security import (
     register_login_failure,
 )
 from ..interview_flow import (
+    DECISION_CHOICES,
     FINAL_RESULTS,
     InterviewFlowError,
     MAX_INTERVIEW_ROUND,

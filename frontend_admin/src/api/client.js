@@ -4,6 +4,7 @@ export const errorCodeMessageMap = Object.freeze({
   INTERVIEW_NOT_SCHEDULED: "当前未安排面试",
   INTERVIEW_NOT_SCHEDULED_FOR_RESULT: "请先安排面试后再记录结果",
   INTERVIEW_ROUND_LIMIT_REACHED: "当前已是最后一轮，不能再进入下一轮",
+  INTERVIEWER_DECISIONS_REQUIRED: "请至少填写一位面试官结论",
 });
 
 export const extractErrorMessage = (payload) => {
@@ -54,6 +55,43 @@ const buildNonJsonErrorPayload = (response, text) => {
 
 export const createRequest = (getToken) => async (url, options = {}) => {
   const headers = { "Content-Type": "application/json" };
+  const currentToken = typeof getToken === "function" ? getToken() : "";
+  if (currentToken) headers.Authorization = `Token ${currentToken}`;
+
+  const response = await fetch(url, { headers, ...options });
+  const text = await response.text();
+  const hasBody = Boolean(String(text || "").trim());
+  const canParseJson = isJsonResponse(response) && hasBody;
+
+  if (!response.ok) {
+    let payload = {};
+    if (canParseJson) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = {
+          detail: `接口返回了无效 JSON（HTTP ${response.status}）`,
+        };
+      }
+    } else if (hasBody) {
+      payload = buildNonJsonErrorPayload(response, text);
+    }
+    throw createApiError(payload);
+  }
+
+  if (response.status === 204 || !hasBody) return {};
+  if (!canParseJson) {
+    throw createApiError(buildNonJsonErrorPayload(response, text));
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw createApiError({ detail: "接口返回了无效 JSON" });
+  }
+};
+
+export const createMultipartRequest = (getToken) => async (url, options = {}) => {
+  const headers = {};
   const currentToken = typeof getToken === "function" ? getToken() : "";
   if (currentToken) headers.Authorization = `Token ${currentToken}`;
 

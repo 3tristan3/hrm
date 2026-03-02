@@ -92,6 +92,7 @@ class ApplicationAdminSerializer(ApplicationAdminPhotoMixin):
     region_name = serializers.CharField(source="region.name", read_only=True)
     job_title = serializers.CharField(source="job.title", read_only=True)
     attachments = serializers.SerializerMethodField()
+    latest_interview_result = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -145,6 +146,7 @@ class ApplicationAdminSerializer(ApplicationAdminPhotoMixin):
             "created_at",
             "extra_fields",
             "attachments",
+            "latest_interview_result",
         ]
 
     def get_attachments(self, obj):
@@ -161,3 +163,57 @@ class ApplicationAdminSerializer(ApplicationAdminPhotoMixin):
             for attachment in attachments
             if attachment.file
         ]
+
+    @staticmethod
+    def _normalize_interviewer_names(interviewers=None, interviewer=""):
+        names = []
+        if isinstance(interviewers, list):
+            names.extend(str(item).strip() for item in interviewers if str(item).strip())
+        if not names and interviewer:
+            raw = str(interviewer)
+            for separator in ("、", "，", ",", ";", "；", "/", "|"):
+                raw = raw.replace(separator, ",")
+            names.extend(name.strip() for name in raw.split(",") if name.strip())
+        return names
+
+    def get_latest_interview_result(self, obj):
+        candidate = getattr(obj, "interview_candidate", None)
+        if not candidate:
+            return None
+
+        latest_record = candidate.round_records.exclude(result="").order_by("-round_no", "-id").first()
+        round_no = latest_record.round_no if latest_record else candidate.interview_round
+        interviewer_names = (
+            self._normalize_interviewer_names(
+                getattr(latest_record, "interviewers", None),
+                getattr(latest_record, "interviewer", ""),
+            )
+            if latest_record
+            else self._normalize_interviewer_names(candidate.interviewers, candidate.interviewer)
+        )
+
+        interviewer_decisions = []
+        raw_rows = latest_record.interviewer_scores if latest_record else candidate.interviewer_scores
+        for row in raw_rows or []:
+            interviewer = str((row or {}).get("interviewer") or "").strip()
+            decision = str((row or {}).get("decision") or "").strip().lower()
+            if interviewer and decision in {"pass", "fail"}:
+                interviewer_decisions.append(
+                    {
+                        "interviewer": interviewer,
+                        "decision": decision,
+                    }
+                )
+
+        result_value = (latest_record.result if latest_record else candidate.result) or ""
+        if not result_value:
+            return None
+
+        return {
+            "round": int(round_no or 1),
+            "interviewers": interviewer_names,
+            "interviewer_decisions": interviewer_decisions,
+            "result": result_value,
+            "result_note": latest_record.result_note if latest_record else candidate.result_note,
+            "result_at": candidate.result_at,
+        }

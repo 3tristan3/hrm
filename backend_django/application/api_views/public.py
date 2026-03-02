@@ -5,6 +5,7 @@ from . import shared as shared_views
 from .shared import *
 
 logger = logging.getLogger(__name__)
+MULTI_FILE_ATTACHMENT_CATEGORIES = {"other", "interview_extra"}
 
 class RegionListView(APIView):
     def get(self, request: Request):
@@ -187,7 +188,7 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
                 {"error": "未上传文件"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if category != "other" and len(files) > 1:
+        if category not in MULTI_FILE_ATTACHMENT_CATEGORIES and len(files) > 1:
             self._log_upload_failure(
                 request,
                 application_id=application.pk,
@@ -227,7 +228,7 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
         existing_attachments = list(application.attachments.all())
         existing_total_bytes = sum(shared_views._safe_file_size(item.file) for item in existing_attachments)
         replaced_bytes = 0
-        if category != "other":
+        if category not in MULTI_FILE_ATTACHMENT_CATEGORIES:
             replaced_bytes = sum(
                 shared_views._safe_file_size(item.file)
                 for item in existing_attachments
@@ -254,7 +255,7 @@ class ApplicationAttachmentListCreateView(ApplicationTokenAccessMixin, APIView):
             )
 
         try:
-            if category != "other":
+            if category not in MULTI_FILE_ATTACHMENT_CATEGORIES:
                 ApplicationAttachment.objects.filter(
                     application=application, category=category
                 ).delete()

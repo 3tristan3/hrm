@@ -86,7 +86,7 @@
                 </th>
                 <th>面试官</th>
                 <th>面试结果</th>
-                <th>评分</th>
+                <th>面试官结论</th>
                 <th>加入时间</th>
                 <th>状态</th>
                 <th>操作</th>
@@ -331,35 +331,66 @@
           </div>
           <div class="form-group full-width">
             <div class="interviewer-group-label">
-              <label>面试官评分</label>
-              <button type="button" class="btn btn-xs btn-default" @click="appendResultScoreRow">
-                新增评分
+              <label>面试官结论</label>
+              <button type="button" class="btn btn-xs btn-default" @click="appendResultDecisionRow">
+                新增面试官
               </button>
             </div>
             <div class="interviewer-list">
               <div
-                v-for="(row, index) in interviewResultForm.interviewer_scores"
-                :key="`result-score-${index}`"
-                class="interviewer-score-row"
+                v-for="(row, index) in interviewResultForm.interviewer_decisions"
+                :key="`result-decision-${index}`"
+                class="interviewer-decision-row"
               >
                 <input
                   v-model.trim="row.interviewer"
                   placeholder="面试官姓名"
                 />
-                <input
-                  v-model.number="row.score"
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="评分"
-                />
+                <select v-model="row.decision">
+                  <option
+                    v-for="item in interviewerDecisionOptions"
+                    :key="`${index}-${item.value}`"
+                    :value="item.value"
+                  >
+                    {{ item.label }}
+                  </option>
+                </select>
                 <button
                   type="button"
                   class="btn btn-xs btn-danger"
-                  :disabled="interviewResultForm.interviewer_scores.length <= 1"
-                  @click="removeResultScoreRow(index)"
+                  :disabled="interviewResultForm.interviewer_decisions.length <= 1"
+                  @click="removeResultDecisionRow(index)"
                 >
                   删除
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="form-group full-width">
+            <div class="interviewer-group-label">
+              <label>补充附件（可选）</label>
+            </div>
+            <div class="interviewer-list">
+              <label class="result-upload-control">
+                <input
+                  class="result-upload-input"
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                  @change="onResultAttachmentChange"
+                />
+                <span class="result-upload-btn">选择附件</span>
+              </label>
+              <div v-if="interviewResultForm.attachments?.length" class="result-attachment-list">
+                <div
+                  v-for="(file, index) in interviewResultForm.attachments"
+                  :key="`${file.name}-${index}`"
+                  class="result-attachment-item"
+                >
+                  {{ file.name }}
+                </div>
+                <button type="button" class="btn btn-xs btn-default" @click="clearResultAttachments">
+                  清空附件
                 </button>
               </div>
             </div>
@@ -526,6 +557,16 @@ const activeSmsTime = computed(() =>
 const activeSmsCanRetry = computed(() =>
   activeSmsItem.value ? smsCanRetry(activeSmsItem.value) : false
 );
+const interviewerDecisionOptions = computed(() => {
+  const rows = Array.isArray(props.interviewMeta?.decision_choices)
+    ? props.interviewMeta.decision_choices
+    : [];
+  if (rows.length) return rows;
+  return [
+    { value: "pass", label: "通过" },
+    { value: "fail", label: "不通过" },
+  ];
+});
 
 const normalizeInterviewerNames = (values = []) => {
   const normalized = [];
@@ -563,6 +604,18 @@ const normalizeInterviewerScoreRows = (rows = []) =>
     )
     .map((row) => ({ interviewer: row.interviewer, score: Number(row.score) }));
 
+const normalizeInterviewerDecisionRows = (rows = []) =>
+  (rows || [])
+    .map((row) => ({
+      interviewer: String(row?.interviewer || "").trim(),
+      decision: String(row?.decision || "").trim().toLowerCase(),
+    }))
+    .filter(
+      (row) =>
+        row.interviewer &&
+        (row.decision === "pass" || row.decision === "fail")
+    );
+
 const formatInterviewerCell = (item) => {
   const names = normalizeInterviewerNames(item?.interviewers || []);
   if (names.length) return names.join("、");
@@ -572,6 +625,12 @@ const formatInterviewerCell = (item) => {
 };
 
 const formatScoreCell = (item) => {
+  const decisionRows = normalizeInterviewerDecisionRows(item?.interviewer_scores || []);
+  if (decisionRows.length) {
+    return decisionRows
+      .map((row) => `${row.interviewer}:${row.decision === "pass" ? "通过" : "不通过"}`)
+      .join(" / ");
+  }
   const rows = normalizeInterviewerScoreRows(item?.interviewer_scores || []);
   if (rows.length) {
     return rows.map((row) => `${row.interviewer}:${row.score}`).join(" / ");
@@ -603,28 +662,48 @@ const removeScheduleInterviewerRow = (index) => {
   props.interviewScheduleForm.interviewers.splice(index, 1);
 };
 
-const ensureResultScoreRows = () => {
-  if (!Array.isArray(props.interviewResultForm.interviewer_scores)) {
-    props.interviewResultForm.interviewer_scores = [{ interviewer: "", score: null }];
+const ensureResultDecisionRows = () => {
+  if (!Array.isArray(props.interviewResultForm.interviewer_decisions)) {
+    props.interviewResultForm.interviewer_decisions = [{ interviewer: "", decision: "pass" }];
     return;
   }
-  if (!props.interviewResultForm.interviewer_scores.length) {
-    props.interviewResultForm.interviewer_scores.push({ interviewer: "", score: null });
+  if (!props.interviewResultForm.interviewer_decisions.length) {
+    props.interviewResultForm.interviewer_decisions.push({ interviewer: "", decision: "pass" });
   }
 };
 
-const appendResultScoreRow = () => {
-  ensureResultScoreRows();
-  props.interviewResultForm.interviewer_scores.push({ interviewer: "", score: null });
+const appendResultDecisionRow = () => {
+  ensureResultDecisionRows();
+  props.interviewResultForm.interviewer_decisions.push({ interviewer: "", decision: "pass" });
 };
 
-const removeResultScoreRow = (index) => {
-  ensureResultScoreRows();
-  if (props.interviewResultForm.interviewer_scores.length <= 1) {
-    props.interviewResultForm.interviewer_scores[0] = { interviewer: "", score: null };
+const removeResultDecisionRow = (index) => {
+  ensureResultDecisionRows();
+  if (props.interviewResultForm.interviewer_decisions.length <= 1) {
+    props.interviewResultForm.interviewer_decisions[0] = { interviewer: "", decision: "pass" };
     return;
   }
-  props.interviewResultForm.interviewer_scores.splice(index, 1);
+  props.interviewResultForm.interviewer_decisions.splice(index, 1);
+};
+
+const ensureResultAttachments = () => {
+  if (!Array.isArray(props.interviewResultForm.attachments)) {
+    props.interviewResultForm.attachments = [];
+  }
+};
+
+const onResultAttachmentChange = (event) => {
+  const fileList = Array.from(event?.target?.files || []);
+  ensureResultAttachments();
+  props.interviewResultForm.attachments = fileList;
+  if (event?.target) {
+    event.target.value = "";
+  }
+};
+
+const clearResultAttachments = () => {
+  ensureResultAttachments();
+  props.interviewResultForm.attachments = [];
 };
 
 const clearSmsPopoverCloseTimer = () => {
@@ -723,7 +802,8 @@ const formatDateOffset = (offsetDays = 0) => {
 };
 const todayDate = formatDateOffset(0);
 ensureScheduleInterviewerRows();
-ensureResultScoreRows();
+ensureResultDecisionRows();
+ensureResultAttachments();
 
 onBeforeUnmount(() => {
   clearSmsPopoverCloseTimer();

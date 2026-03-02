@@ -12,6 +12,12 @@ FINAL_RESULTS = (
     InterviewCandidate.RESULT_PASS,
     InterviewCandidate.RESULT_REJECT,
 )
+DECISION_PASS = "pass"
+DECISION_FAIL = "fail"
+DECISION_CHOICES = (
+    (DECISION_PASS, "通过"),
+    (DECISION_FAIL, "不通过"),
+)
 
 
 @dataclass
@@ -72,60 +78,30 @@ def _join_interviewers(interviewers) -> str:
     return "、".join(names)
 
 
-def _normalize_interviewer_scores(items) -> list[dict]:
-    rows = []
-    seen = set()
-    for raw in items or []:
-        if not isinstance(raw, dict):
-            continue
-        interviewer = str(raw.get("interviewer") or "").strip()
-        score_raw = raw.get("score", None)
-        if not interviewer or score_raw in (None, ""):
-            continue
-        try:
-            score = int(score_raw)
-        except (TypeError, ValueError):
-            continue
-        if score < 0 or score > 100:
-            continue
-        if interviewer in seen:
-            continue
-        seen.add(interviewer)
-        rows.append({"interviewer": interviewer, "score": score})
-    return rows
-
-
-def _aggregate_score(interviewer_scores, fallback_score=None):
-    if interviewer_scores:
-        total = sum(int(item.get("score", 0)) for item in interviewer_scores)
-        return int((total / len(interviewer_scores)) + 0.5)
-    if fallback_score in (None, ""):
-        return None
-    try:
-        parsed = int(fallback_score)
-    except (TypeError, ValueError):
-        return None
-    if parsed < 0 or parsed > 100:
-        return None
-    return parsed
-
-
-def _fallback_interviewer_scores(interviewers, fallback_score=None) -> list[dict]:
-    score = _aggregate_score([], fallback_score=fallback_score)
-    if score is None:
-        return []
-    names = _normalize_name_list(interviewers)
-    if len(names) == 1:
-        return [{"interviewer": names[0], "score": score}]
-    return []
-
-
 def _is_flow_closed(candidate: InterviewCandidate) -> bool:
     """流程已结束（已完成且结果为终态）时，禁止继续安排。"""
     return (
         candidate.status == InterviewCandidate.STATUS_COMPLETED
         and candidate.result in FINAL_RESULTS
     )
+
+
+def normalize_interviewer_decisions(rows) -> list[dict]:
+    """归一化面试官结论，去重并忽略空项。"""
+    normalized = []
+    seen = set()
+    for raw in rows or []:
+        if not isinstance(raw, dict):
+            continue
+        interviewer = str(raw.get("interviewer") or "").strip()
+        decision = str(raw.get("decision") or "").strip().lower()
+        if not interviewer or decision not in {DECISION_PASS, DECISION_FAIL}:
+            continue
+        if interviewer in seen:
+            continue
+        seen.add(interviewer)
+        normalized.append({"interviewer": interviewer, "decision": decision})
+    return normalized
 
 
 def resolve_schedule_round(candidate: InterviewCandidate) -> int:
@@ -234,8 +210,7 @@ def record_result(
     candidate: InterviewCandidate,
     *,
     result: str,
-    score=None,
-    interviewer_scores=None,
+    interviewer_decisions=None,
     result_note: str = "",
 ) -> InterviewCandidate:
     """记录本轮结果并推进流程，同时落盘轮次快照。"""
@@ -255,17 +230,12 @@ def record_result(
     current_interviewers = _normalize_name_list(candidate.interviewers)
     if not current_interviewers:
         current_interviewers = _split_legacy_interviewer(candidate.interviewer)
-    resolved_interviewer_scores = _normalize_interviewer_scores(interviewer_scores)
-    if not resolved_interviewer_scores:
-        resolved_interviewer_scores = _fallback_interviewer_scores(
-            current_interviewers,
-            fallback_score=score,
+    normalized_decisions = normalize_interviewer_decisions(interviewer_decisions)
+    if not normalized_decisions:
+        raise InterviewFlowError(
+            code="INTERVIEWER_DECISIONS_REQUIRED",
+            message="请至少填写一位面试官结论",
         )
-    if resolved_interviewer_scores and not current_interviewers:
-        current_interviewers = _normalize_name_list(
-            [item.get("interviewer", "") for item in resolved_interviewer_scores]
-        )
-    resolved_score = _aggregate_score(resolved_interviewer_scores, fallback_score=score)
 
     InterviewRoundRecord.objects.update_or_create(
         candidate=candidate,
@@ -274,16 +244,16 @@ def record_result(
             "interview_at": candidate.interview_at,
             "interviewer": _join_interviewers(current_interviewers),
             "interviewers": current_interviewers,
-            "score": resolved_score,
-            "interviewer_scores": resolved_interviewer_scores,
+            "score": None,
+            "interviewer_scores": normalized_decisions,
             "result": result,
             "result_note": result_note,
         },
     )
 
     candidate.result = result
-    candidate.score = resolved_score
-    candidate.interviewer_scores = resolved_interviewer_scores
+    candidate.score = None
+    candidate.interviewer_scores = normalized_decisions
     candidate.result_note = result_note
     candidate.result_at = timezone.now()
     candidate.interview_at = None

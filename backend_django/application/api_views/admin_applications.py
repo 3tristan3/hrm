@@ -5,7 +5,7 @@ class _ApplicationAdminQuerysetMixin(AdminScopedMixin):
     """共享 Application 查询集逻辑。"""
 
     def get_queryset(self):
-        queryset = Application.objects.select_related("region", "job").prefetch_related(
+        queryset = Application.objects.select_related("region", "job", "interview_candidate").prefetch_related(
             Prefetch(
                 "attachments",
                 queryset=ApplicationAttachment.objects.filter(category="photo").order_by("-created_at"),

@@ -214,7 +214,8 @@
   .detail-attachments-grid { grid-template-columns: 1fr; }
   .card-info-grid { grid-template-columns: 1fr; }
   .interviewer-row,
-  .interviewer-score-row {
+  .interviewer-score-row,
+  .interviewer-decision-row {
     grid-template-columns: 1fr;
   }
   .interviewer-group-label {

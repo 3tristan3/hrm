@@ -80,13 +80,13 @@
                 <th>学历</th>
                 <th>状态</th>
                 <th>第一轮</th>
-                <th>第一轮评分</th>
+                <th>第一轮结论</th>
                 <th>第一轮面试官</th>
                 <th>第二轮</th>
-                <th>第二轮评分</th>
+                <th>第二轮结论</th>
                 <th>第二轮面试官</th>
                 <th>第三轮</th>
-                <th>第三轮评分</th>
+                <th>第三轮结论</th>
                 <th>第三轮面试官</th>
               </tr>
             </thead>
@@ -419,7 +419,25 @@ const normalizeScoreRows = (rows = []) =>
     )
     .map((row) => ({ interviewer: row.interviewer, score: Number(row.score) }));
 
+const normalizeDecisionRows = (rows = []) =>
+  (rows || [])
+    .map((row) => ({
+      interviewer: String(row?.interviewer || "").trim(),
+      decision: String(row?.decision || "").trim().toLowerCase(),
+    }))
+    .filter(
+      (row) =>
+        row.interviewer &&
+        (row.decision === "pass" || row.decision === "fail")
+    );
+
 const formatRoundScore = (rows, fallbackScore) => {
+  const decisionRows = normalizeDecisionRows(rows);
+  if (decisionRows.length) {
+    return decisionRows
+      .map((row) => `${row.interviewer}:${row.decision === "pass" ? "通过" : "不通过"}`)
+      .join(" / ");
+  }
   const normalizedRows = normalizeScoreRows(rows);
   if (normalizedRows.length) {
     return normalizedRows.map((row) => `${row.interviewer}:${row.score}`).join(" / ");
@@ -428,9 +446,13 @@ const formatRoundScore = (rows, fallbackScore) => {
 };
 
 const formatRoundInterviewer = (rows, fallbackInterviewer) => {
-  const normalizedRows = normalizeScoreRows(rows);
-  if (normalizedRows.length) {
-    return normalizedRows.map((row) => row.interviewer).join("、");
+  const decisionRows = normalizeDecisionRows(rows);
+  if (decisionRows.length) {
+    return decisionRows.map((row) => row.interviewer).join("、");
+  }
+  const scoreRows = normalizeScoreRows(rows);
+  if (scoreRows.length) {
+    return scoreRows.map((row) => row.interviewer).join("、");
   }
   return fallbackInterviewer || "-";
 };

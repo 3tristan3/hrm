@@ -110,10 +110,46 @@ export const useAdminApplicationDetail = ({
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const formatInterviewerDecisionSummary = (snapshot = {}) => {
+    const rows = Array.isArray(snapshot?.interviewer_decisions)
+      ? snapshot.interviewer_decisions
+      : [];
+    const normalizedRows = rows
+      .map((row) => ({
+        interviewer: String(row?.interviewer || "").trim(),
+        decision: String(row?.decision || "").trim().toLowerCase(),
+      }))
+      .filter(
+        (row) =>
+          row.interviewer && (row.decision === "pass" || row.decision === "fail")
+      );
+    if (normalizedRows.length) {
+      return normalizedRows
+        .map((row) => `面试官${row.interviewer}，${row.decision === "pass" ? "通过" : "不通过"}`)
+        .join("；");
+    }
+    const names = Array.isArray(snapshot?.interviewers)
+      ? snapshot.interviewers
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      : [];
+    if (names.length) {
+      return names.map((name) => `面试官${name}`).join("；");
+    }
+    return "面试官信息暂无";
+  };
+
+  const formatInterviewResultSummary = (snapshot = {}) => {
+    const round = Number(snapshot?.round || 1);
+    const interviewerSummary = formatInterviewerDecisionSummary(snapshot);
+    const result = String(snapshot?.result || "").trim() || "暂无";
+    return `第${round}轮面试，${interviewerSummary}。面试结果：${result}`;
+  };
+
   const detailSections = computed(() => {
     if (!activeApplication.value) return [];
     const app = activeApplication.value;
-    return [
+    const sections = [
       {
         title: "基础信息",
         items: [
@@ -236,6 +272,19 @@ export const useAdminApplicationDetail = ({
         ],
       },
     ];
+    const snapshot = app.latest_interview_result;
+    if (snapshot && snapshot.result) {
+      sections.unshift({
+        title: "面试结果",
+        blocks: [
+          {
+            label: "结果摘要",
+            value: formatInterviewResultSummary(snapshot),
+          },
+        ],
+      });
+    }
+    return sections;
   });
 
   return {

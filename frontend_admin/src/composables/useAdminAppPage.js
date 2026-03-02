@@ -4,6 +4,7 @@ import { buildApiUrl, resolveAssetUrl } from "../config/runtime";
 import { useConfirmAction } from "./useConfirmAction";
 import { createInterviewApi } from "../api/interview";
 import {
+  createMultipartRequest,
   createRequest,
   resolveErrorCodeMessage,
 } from "../api/client";
@@ -55,7 +56,8 @@ export const useAdminAppPage = () => {
 
   // === API 请求封装 ===
   const request = createRequest(() => token.value);
-  const interviewApi = createInterviewApi({ adminBase, request });
+  const multipartRequest = createMultipartRequest(() => token.value);
+  const interviewApi = createInterviewApi({ adminBase, request, multipartRequest });
 
   const notifyError = (err) => {
     console.error(err);
